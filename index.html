@@ -3,6 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<!-- v45: app web: añadida a la pantalla de inicio se abre a pantalla completa (la única forma en iPhone) -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a1838">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mini GP">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
 <title>Mini GP — prototipo</title>
 <style>
 :root{--acc:#1f6fff;--acc2:#0d47c4;--navy:#0a1838;--panel:rgba(9,22,52,.82);--line:#24406f;--btn:#14295a;--hi:#8fd0ff}
@@ -1714,7 +1723,7 @@ const clone=o=>JSON.parse(JSON.stringify(o));
 let TEAMS=sget('minigp3_teams',null)||clone(DEFAULT_TEAMS);
 if(TEAMS.length<DEFAULT_TEAMS.length)TEAMS=TEAMS.concat(clone(DEFAULT_TEAMS.slice(TEAMS.length))); // equipos nuevos para parrillas de 20-22
 let CH=sget('minigp4_champ',null);
-let settings=Object.assign({track:0,laps:5,diff:'normal',quali:1,mult:1,comp:'M',fuel:'full',cars:16,steer:'sim',steerSens:7,steerRate:6,cam:'fixed',damage:1,aids:1,incidents:2,autoRep:1,formation:1,tod:'day',engMode:'synth',engPitch:6,scOn:1,scModel:'gt',ghost:1,snd:1,vib:1,drsAuto:0,radio:1,voice:1,weather:'var',wings:{},setups:{}},sget('minigp3_settings',{}));
+let settings=Object.assign({track:0,laps:5,diff:'normal',quali:1,mult:1,comp:'M',fuel:'full',cars:16,steer:'sim',steerSens:7,steerRate:6,cam:'fixed',damage:1,aids:1,incidents:2,autoRep:1,formation:1,tod:'day',engMode:'synth',engPitch:6,scOn:1,scModel:'gt',ghost:1,snd:1,vib:1,mzoom:2,drsAuto:0,radio:1,voice:1,weather:'var',wings:{},setups:{}},sget('minigp3_settings',{}));
 let newChamp={tracks:[0,1,2,3,4,5,6,7,8,9],laps:5,diff:'normal',quali:1,mult:1,cars:16,damage:1,weather:'rand',weekend:1};
 const STORES={settings,newChamp};
 function saveTeams(){sset('minigp3_teams',TEAMS);}
@@ -2244,7 +2253,7 @@ function voiceSelect(){const vs=esVoices(),best=pickVoice();if(!vs.length)return
 function openSettings(){
   $('steerSeg').innerHTML=segHtml('settings','steer',OPT.steer);$('steerAdjMenu').innerHTML=steerAdjHtml();$('engSnd').innerHTML=engSoundHtml();
   $('sndOpts').innerHTML=`<span class="fl">Ingeniero por radio</span>${segHtml('settings','voice',OPT.voice)}<span class="fl">Cuánto habla</span>${segHtml('settings','radioLvl',[[0,'Solo lo importante'],[1,'Normal']])}<span class="fl">Voz del ingeniero</span>${voiceSelect()}<span class="fl">Sonido general</span>${segHtml('settings','snd',[[1,'Activado'],[0,'Silencio']])}<span class="fl">Vibración (móvil)</span>${segHtml('settings','vib',[[1,'Sí'],[0,'No']])}`;
-  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Estilo de los coches</span>${segHtml('settings','carStyle',[[0,'Realista'],[1,'Clásico']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
+  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Estilo de los coches</span>${segHtml('settings','carStyle',[[0,'Realista'],[1,'Clásico']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
   $('engPick').onclick=engWavPick;if($('engDel'))$('engDel').onclick=()=>{try{localStorage.removeItem(ENGWAV_KEY);}catch(e){}settings.engMode='synth';saveSettings();engSampleStop();openSettings();};
   if($('voiceSel')){$('voiceSel').onchange=e=>{settings.voiceName=e.target.value;saveSettings();};$('voiceTry').onclick=()=>{try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance('Box, box. Ponemos medios y salimos por delante de Ortega.');u.lang='es-ES';u.rate=1.06;const v=pickVoice();if(v)u.voice=v;speechSynthesis.speak(u);}catch(e){}};}
   showOnly('settings');}
@@ -2693,8 +2702,27 @@ function setPaused(v){
 function restartSession(){if(!EV)return;if(R.practice)startPractice();else if(R.mode==='quali')startQuali();else startRace(true);}
 $('resume').onclick=()=>setPaused(false);
 $('restart1').onclick=restartSession;$('replay1').onclick=()=>{showOnly(null);paused=false;startReplay();};$('endq').onclick=()=>{if(R.practice&&EV.weekend){EV.stage='quali';showOnly(null);paused=false;goQualiOrRace();}else endQuali();};$('tomenu1').onclick=leaveToMenu;
-$('bFull').onclick=()=>{try{if(document.fullscreenElement)document.exitFullscreen();else (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen).call(document.documentElement);}catch(e){}};
-document.addEventListener('fullscreenchange',()=>{$('bFull').textContent=document.fullscreenElement?'⛶ Salir de pantalla completa':'⛶ Pantalla completa';});
+// v45: pantalla completa. En Android/PC se pide al navegador (y se gira a horizontal); en iPhone Safari no lo permite en páginas web:
+// se explica cómo añadir el juego a la pantalla de inicio, que lo abre sin barras. Abierto desde ese icono, el botón no hace falta.
+const IS_IOS=/iP(hone|od|ad)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const IS_APP=window.matchMedia&&(matchMedia('(display-mode: fullscreen)').matches||matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;
+function fullHelp(){
+  const ios=IS_IOS,box=document.createElement('div');box.className='overlay';box.id='fullHelp';
+  box.innerHTML=`<div class="card"><h2>Pantalla completa</h2><p class="sub">${ios?'En iPhone, Safari no deja poner una página web a pantalla completa. Pero puedes instalar el juego como app:':'Tu navegador no ha dejado activarla. Prueba a instalar el juego como app:'}</p>
+    <ol style="line-height:1.7;font-size:15px;padding-left:20px">${ios?'<li>Abre el juego en <b>Safari</b>.</li><li>Pulsa el botón <b>Compartir</b> (el cuadrado con la flecha hacia arriba).</li><li>Elige <b>Añadir a pantalla de inicio</b> y pulsa <b>Añadir</b>.</li><li>Abre Mini GP desde el icono nuevo: se verá a pantalla completa.</li>':'<li>Abre el menú del navegador (⋮ arriba a la derecha).</li><li>Pulsa <b>Instalar aplicación</b> o <b>Añadir a pantalla de inicio</b>.</li><li>Abre Mini GP desde el icono nuevo.</li>'}</ol>
+    <button class="go" id="fullHelpOk">Entendido</button></div>`;
+  document.body.appendChild(box);$('fullHelpOk').onclick=()=>box.remove();}
+async function goFull(){
+  const el=document.documentElement,rq=el.requestFullscreen||el.webkitRequestFullscreen;
+  if(document.fullscreenElement||document.webkitFullscreenElement){(document.exitFullscreen||document.webkitExitFullscreen).call(document);return;}
+  if(!rq){fullHelp();return;}
+  try{await rq.call(el,{navigationUI:'hide'});try{if(screen.orientation&&screen.orientation.lock&&matchMedia('(pointer: coarse)').matches)await screen.orientation.lock('landscape');}catch(e){}}
+  catch(e){fullHelp();}
+}
+$('bFull').onclick=goFull;
+if(IS_APP)$('bFull').style.display='none';
+const fsLabel=()=>{$('bFull').textContent=(document.fullscreenElement||document.webkitFullscreenElement)?'⛶ Salir de pantalla completa':!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?'⛶ Pantalla completa (instalar)':'⛶ Pantalla completa';};
+document.addEventListener('fullscreenchange',fsLabel);document.addEventListener('webkitfullscreenchange',fsLabel);fsLabel();
 $('bQuick').onclick=openQuick;$('bPlay').onclick=()=>quickPlay($('bPlay'));$('bHelp').onclick=openWelcome;$('bSettings').onclick=openSettings;$('setBack').onclick=openMenu;$('bChamp').onclick=()=>{if(CH&&CH.career)CH=sget('minigp4_champ',null);openChamp();};$('bCareer').onclick=openCareer;$('bTeams').onclick=openTeams;
 
 // pedir box: el juego se pausa y eliges gomas y gasolina (PC y móvil)
@@ -4070,10 +4098,12 @@ function drawMinimap(G){
 function updateCam(dt){
   const p=R.player,sp=Math.hypot(p.vx,p.vy),rot=camMode==='rot';
   // móvil: pantalla baja, así que la cámara va más alta y mira más adelante cuando vas rápido
-  const base=(COMPACT?clamp(Math.min(VW,VH)/640*1.45,0.5,2.2)*0.8:clamp(Math.min(VW,VH)/640*1.45,0.7,2.2))*(attract?0.8:1); // coches a escala real: más cerca
+  // v45: en el móvil la cámara iba demasiado lejos (coche de ~21 px a 170 km/h): ahora mucho más cerca, ajustable (Zoom en el móvil)
+  const mz=[1,1.4,1.8][settings.mzoom==null?2:settings.mzoom]||1.8;
+  const base=(COMPACT?clamp(Math.min(VW,VH)/640*1.45,0.5,2.2)*0.8*mz:clamp(Math.min(VW,VH)/640*1.45,0.7,2.2))*(attract?0.8:1); // coches a escala real: más cerca
   // a más velocidad, la cámara se aleja: se ve más circuito y se nota la velocidad
   const f=attract?0:Math.pow(Math.min(1,sp/VMAX),1.15);
-  const zk=COMPACT?0.42:0.36,tz=rot?base*(1-(zk-0.01)*f):base*(0.98-zk*f);
+  const zk=COMPACT?(mz>1?0.3:0.42):0.36,tz=rot?base*(1-(zk-0.01)*f):base*(0.98-zk*f);
   cam.z+=(tz-cam.z)*Math.min(1,(tz<cam.z?1.4:2.2)*dt);
   const look=COMPACT?(rot?0.22+0.26*f:0.26+0.28*f):(rot?0.14+0.14*f:0.2+0.17*f),tx=p.x+p.vx*look,ty=p.y+p.vy*look,k=Math.min(1,(rot?10:4)*dt);
   cam.x+=(tx-cam.x)*k;cam.y+=(ty-cam.y)*k;
