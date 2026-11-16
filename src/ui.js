@@ -17,13 +17,16 @@ const clone=o=>JSON.parse(JSON.stringify(o));
 let TEAMS=sget('minigp3_teams',null)||clone(DEFAULT_TEAMS);
 if(TEAMS.length<DEFAULT_TEAMS.length)TEAMS=TEAMS.concat(clone(DEFAULT_TEAMS.slice(TEAMS.length))); // equipos nuevos para parrillas de 20-22
 let CH=sget('minigp4_champ',null);
-let settings=Object.assign({track:0,laps:5,diff:'normal',quali:1,mult:1,comp:'M',fuel:'full',cars:16,steer:'sim',steerSens:7,steerRate:6,cam:'fixed',damage:1,aids:1,incidents:2,autoRep:1,formation:1,tod:'day',engMode:'synth',engPitch:6,scOn:1,scModel:'gt',ghost:1,snd:1,vib:1,mzoom:2,photo:0,qlive:1,qlen:5,drsAuto:0,radio:1,voice:1,weather:'var',wings:{},setups:{}},sget('minigp3_settings',{}));
+/* v46: rivales más duros: los niveles de los bots pasan a 90-98 (se reescalan una vez los equipos guardados, manteniendo el orden) */
+function rateMig(teams){if(!teams)return;const bs=[];teams.forEach(t=>(t.drivers||[]).forEach(d=>{if(!d.player)bs.push(d);}));if(!bs.length)return;const lo=Math.min(...bs.map(d=>+d.rating||0)),hi=Math.max(...bs.map(d=>+d.rating||0));if(lo>=90)return;bs.forEach(d=>{d.rating=hi>lo?Math.round(90+8*((+d.rating||0)-lo)/(hi-lo)):94;});}
+if(!sget('minigp5_rmig',0)){rateMig(TEAMS);sset('minigp3_teams',TEAMS);if(CH&&CH.teams&&!CH.career){rateMig(CH.teams);sset('minigp4_champ',CH);}sset('minigp5_rmig',1);}
+let settings=Object.assign({track:0,laps:5,diff:'normal',quali:1,mult:1,comp:'M',fuel:'full',cars:16,steer:'sim',steerSens:7,steerRate:6,cam:'fixed',damage:1,aids:1,incidents:2,autoRep:1,formation:1,tod:'day',engMode:'synth',engPitch:6,scOn:1,scModel:'gt',ghost:1,snd:1,vib:1,mzoom:2,photo:0,realtex:1,qlive:1,qlen:5,drsAuto:0,radio:1,voice:1,weather:'var',wings:{},setups:{}},sget('minigp3_settings',{}));
 let newChamp={tracks:[0,1,2,3,4,5,6,7,8,9],laps:5,diff:'normal',quali:1,mult:1,cars:16,damage:1,weather:'rand',weekend:1};
 const STORES={settings,newChamp};
 function saveTeams(){sset('minigp3_teams',TEAMS);}
 function saveChamp(){if(CH&&CH.career){if(CR){CR.ch=CH;sset('minigp6_career',CR);}}else sset('minigp4_champ',CH);}
 setUsePhoto(settings.photo===1); /* v45: foto aérea solo si se eligió en Ajustes */
-function saveSettings(){sset('minigp3_settings',settings);applyPhotoSetting();}
+function saveSettings(){sset('minigp3_settings',settings);applyPhotoSetting();if(ui&&ui.rtx!==settings.realtex){ui.rtx=settings.realtex;try{clearTiles();}catch(e){}}}
 /* v45: foto aérea opcional: al cambiarla se rehacen circuito y baldosas */
 function applyPhotoSetting(){const v=settings.photo===1;if(typeof USE_PHOTO!=='undefined'&&USE_PHOTO!==v){setUsePhoto(v);for(const k in GFX)delete GFX[k];if(typeof TRK_CACHE!=='undefined')for(const k in TRK_CACHE)delete TRK_CACHE[k];try{clearTiles();}catch(e){}}}
 // v43: el consumo x2 por defecto convertía las carreras cortas en una lotería de paradas; se pasa una vez a x1 (se puede volver a subir)
@@ -140,6 +143,14 @@ function realTex(name){
     PAT[name]=pat;TILES.forEach(v=>tileFree.push(v.c));TILES.clear();};
   im.src=TEXDATA[name];
 }
+/* v46 (prueba en Monza): texturas fotográficas reales, sin teñir (Poly Haven, CC0), a su tamaño aproximado en metros (6,5 px = 1 m).
+   Se cargan desde img/tex solo al correr en Monza; en Ajustes → «Monza (prueba)» se puede volver al dibujado. */
+const REALTEX={asphalt:{src:'img/tex/aerial_asphalt_01_diff_1k.jpg',m:30,px:1024},grass:{src:'img/tex/grass_ground_diff_1k.jpg',m:8,px:256},gravel:{src:'img/tex/gravel_floor_02_diff_1k.jpg',m:5,px:256},runoffG:{src:'img/tex/dirt_aerial_02_diff_1k.jpg',m:20,px:512}};
+const PATR={};let PATRset=null,realTexLoading=false;
+function loadRealTex(){if(realTexLoading)return;realTexLoading=true;
+  for(const k in REALTEX){const cf=REALTEX[k],im=new Image();im.onload=()=>{const o=document.createElement('canvas');o.width=o.height=cf.px;const g=o.getContext('2d');g.drawImage(im,0,0,cf.px,cf.px);
+    const pat=ctx.createPattern(o,'repeat');if(pat.setTransform)pat.setTransform(new DOMMatrix().scale(cf.m*6.5/cf.px));PATR[k]=pat;PATRset=null;try{clearTiles();}catch(e){}};im.src=cf.src;}}
+function texSet(tr){if(settings.realtex===0||!tr||tr.ti!==0||tr.photo)return PAT;loadRealTex();if(!PATRset){PATRset=Object.assign({},PAT);for(const k of ['asphalt','grass','gravel'])if(PATR[k])PATRset[k]=PATR[k];PATRset.real=true;}return PATRset;}
 // árboles: copas pre-dibujadas con volumen y sombra (más baratos que dibujarlos con círculos cada fotograma)
 const TREE_SPR=[0,1,2,3].map(v=>{const R=rng(70+v),S=96,o=document.createElement('canvas');o.width=o.height=S;const g=o.getContext('2d'),c=S/2;
   const base=[[34,92,38],[28,84,34],[46,104,40],[38,86,30]][v];
@@ -480,7 +491,7 @@ function segHtml(store,key,opts,multi){
   return `<div class="seg${multi?' multi':''}" data-store="${store}" data-set="${key}"${multi?' data-multi="1"':''}>`+
     opts.map(([v,l])=>`<button data-v="${v}" class="${multi?(cur.includes(+v)?'sel':''):(String(cur)===String(v)?'sel':'')}">${l}</button>`).join('')+'</div>';
 }
-const NUMKEYS=['qlive','qlen','radioLvl','track','laps','quali','mult','cars','damage','aids','incidents','weekend','autoRep','formation','scOn','radio','voice','snd','ghost','vib','drsAuto','cornerHint','qfmt','adaptOn','carStyle'];
+const NUMKEYS=['realtex','qlive','qlen','radioLvl','track','laps','quali','mult','cars','damage','aids','incidents','weekend','autoRep','formation','scOn','radio','voice','snd','ghost','vib','drsAuto','cornerHint','qfmt','adaptOn','carStyle'];
 document.addEventListener('click',e=>{
   const b=e.target.closest('.seg button');if(!b)return;
   const seg=b.parentElement,store=STORES[seg.dataset.store],k=seg.dataset.set,v=b.dataset.v;
@@ -569,10 +580,19 @@ function voiceSelect(){const vs=esVoices(),best=pickVoice();if(!vs.length)return
 function openSettings(){
   $('steerSeg').innerHTML=segHtml('settings','steer',OPT.steer);$('steerAdjMenu').innerHTML=steerAdjHtml();$('engSnd').innerHTML=engSoundHtml();
   $('sndOpts').innerHTML=`<span class="fl">Ingeniero por radio</span>${segHtml('settings','voice',OPT.voice)}<span class="fl">Cuánto habla</span>${segHtml('settings','radioLvl',[[0,'Solo lo importante'],[1,'Normal']])}<span class="fl">Voz del ingeniero</span>${voiceSelect()}<span class="fl">Sonido general</span>${segHtml('settings','snd',[[1,'Activado'],[0,'Silencio']])}<span class="fl">Vibración (móvil)</span>${segHtml('settings','vib',[[1,'Sí'],[0,'No']])}`;
-  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Montmeló</span>${segHtml('settings','photo',[[0,'Dibujado (nítido)'],[1,'Foto aérea real']])}<span class="fl">Estilo de los coches</span>${segHtml('settings','carStyle',[[0,'Realista'],[1,'Clásico']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
+  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Montmeló</span>${segHtml('settings','photo',[[0,'Dibujado (nítido)'],[1,'Foto aérea real']])}<span class="fl">Monza (prueba)</span>${segHtml('settings','realtex',[[1,'Texturas reales'],[0,'Dibujado']])}<span class="fl">Estilo de los coches</span>${segHtml('settings','carStyle',[[0,'Realista'],[1,'Clásico']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
   $('engPick').onclick=engWavPick;if($('engDel'))$('engDel').onclick=()=>{try{localStorage.removeItem(ENGWAV_KEY);}catch(e){}settings.engMode='synth';saveSettings();engSampleStop();openSettings();};
   if($('voiceSel')){$('voiceSel').onchange=e=>{settings.voiceName=e.target.value;saveSettings();};$('voiceTry').onclick=()=>{try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance('Box, box. Ponemos medios y salimos por delante de Ortega.');u.lang='es-ES';u.rate=1.06;const v=pickVoice();if(v)u.voice=v;speechSynthesis.speak(u);}catch(e){}};}
   showOnly('settings');}
+/* v46: elige tu piloto (nombre) y tu escudería en carrera rápida y campeonato. Tu sitio lo deja un piloto de ese equipo;
+   al cambiar de equipo, el piloto que habías desplazado vuelve a su asiento (d.prev). */
+function meFind(){for(let i=0;i<TEAMS.length;i++)for(let j=0;j<TEAMS[i].drivers.length;j++)if(TEAMS[i].drivers[j].player)return {i,j,d:TEAMS[i].drivers[j]};return null;}
+function setMe(ti,name){const cur=meFind();if(name==null)name=cur?cur.d.name:'Tú';
+  if(cur&&cur.i===ti){cur.d.name=name;saveTeams();return;}
+  if(cur){const back=cur.d.prev||(DEFAULT_TEAMS[cur.i]&&!DEFAULT_TEAMS[cur.i].drivers[cur.j].player?clone(DEFAULT_TEAMS[cur.i].drivers[cur.j]):{name:['A. Ferrer','D. Navarro','M. Castell','R. Lindgren','G. Moretti','I. Duval'].find(n=>!TEAMS.some(t=>t.drivers.some(d=>d.name===n)))||'Reserva',rating:93});delete back.player;TEAMS[cur.i].drivers[cur.j]=back;}
+  const t=TEAMS[ti],k=(t.drivers[0].rating||0)<=(t.drivers[1].rating||0)?0:1,prev=t.drivers[k];t.drivers[k]={name,rating:100,player:true,prev};saveTeams();}
+function meHtml(){const cur=meFind();return `<section class="mgrp"><h3>Tu piloto</h3><div class="two"><div><span class="fl">Nombre</span><input type="text" id="meName" maxlength="18" value="${esc(cur?cur.d.name:'Tú')}" style="width:100%"></div><div><span class="fl">Escudería</span><select id="meTeam" style="width:100%">${TEAMS.map((t,i)=>`<option value="${i}" ${cur&&cur.i===i?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div></div></section>`;}
+function meBind(){const n=$('meName'),t=$('meTeam');if(!n||!t)return;n.oninput=()=>{const cur=meFind();if(cur){cur.d.name=n.value.trim()||'Tú';saveTeams();}};t.onchange=()=>setMe(+t.value,n.value.trim()||'Tú');}
 function openQuick(){
   const ti=settings.track,T=TRACKS[ti],inf=trackInfo(ti),F=(l,h)=>`<div><span class="fl">${l}</span>${h}</div>`;
   const grp=(ic,title,body,cls='')=>`<section class="mgrp ${cls}"><h3>${icon(ic,20)}${title}</h3><div class="two">${body}</div></section>`;
@@ -581,6 +601,7 @@ function openQuick(){
     <span class="fl">Circuito</span>${trackSelect('qTrack',ti)}
     <div class="stats"><div><b>${(inf.len/1000).toFixed(2).replace('.',',')}</b><span>km por vuelta</span></div><div><b>${inf.corners}</b><span>curvas</span></div>
      <div><b>${((inf.len*settings.laps)/1000).toFixed(0)}</b><span>km de carrera</span></div><div>${lvlBars(Math.round(1+3*(T.wing||0.5)),4,'#b388ff')}<span>carga aerodinámica</span></div></div></div></div>
+  ${meHtml()}
   ${grp('flag','Carrera',F('Vueltas',segHtml('settings','laps',OPT.laps))+F('Coches',segHtml('settings','cars',OPT.cars))+F('Dificultad',segHtml('settings','diff',OPT.diff))+F('Clasificación',segHtml('settings','quali',OPT.quali))+F('Formato de clasificación',segHtml('settings','qfmt',[[1,'Q1 · Q2 · Q3'],[0,'Sesión única']]))+F('Clasificación',segHtml('settings','qlive',[[1,'En directo (decides cuándo salir)'],[0,'Vuelta cronometrada']]))+F('Duración de cada sesión',segHtml('settings','qlen',[[3,'3 min'],[5,'5 min'],[8,'8 min']]))+F('Vuelta de formación',segHtml('settings','formation',OPT.formation)))}
   ${grp('car','Tu coche y estrategia',`<div class="wide2">${F('Neumático de salida · Litostone',segHtml('settings','comp',OPT.comp))}</div>`+F('Gasolina de salida',segHtml('settings','fuel',OPT.fuel))+F('Desgaste y consumo',segHtml('settings','mult',OPT.mult))+F('Ayudas de estabilidad',segHtml('settings','aids',OPT.aids)))}
   ${grp('var','Condiciones',F('Clima',segHtml('settings','weather',OPT.weather))+`<div class="wide2">${F('Hora',segHtml('settings','tod',OPT.tod))}</div>`)}
@@ -592,13 +613,13 @@ function openQuick(){
   $('qTrack').onchange=e=>{settings.track=parseInt(e.target.value,10);saveSettings();openQuick();};
   $('qPrac').onclick=()=>launch({track:settings.track,laps:99,diff:settings.diff,mult:0,quali:false,practice:true,comp:settings.comp,fuel:'full',nCars:settings.cars,damage:!!settings.damage,weather:settings.weather,wing:setupNorm(settings.track).wing,setup:setupNorm(settings.track),teams:TEAMS,champ:false},$('qPrac'));
   $('qGo').onclick=()=>launch({track:settings.track,laps:settings.laps,diff:settings.diff,mult:settings.mult,quali:!!settings.quali,comp:settings.comp,fuel:settings.fuel,nCars:settings.cars,damage:!!settings.damage,weather:settings.weather,wing:setupNorm(settings.track).wing,setup:setupNorm(settings.track),teams:TEAMS,champ:false},$('qGo'));
-  $('qBack').onclick=openMenu;showOnly('quick');
+  meBind();$('qBack').onclick=openMenu;showOnly('quick');
 }
 
 // ---------- editor de equipos ----------
 function openTeams(){
   const rows=TEAMS.map((t,i)=>`<div class="team">
-    <div class="cols">${teamLogo(t.name,t.color,t.color2,30)}<input type="color" value="${t.color}" data-t="${i}" data-f="color" title="Color principal"><input type="color" value="${t.color2}" data-t="${i}" data-f="color2" title="Color secundario"></div>
+    <div class="cols">${teamLogo(t.name,t.color,t.color2,30)}<select data-t="${i}" data-f="shape" title="Forma del escudo">${LOGO_SHAPES.map((n,k)=>`<option value="${k}" ${logoIdx(t).s===k?'selected':''}>${n}</option>`).join('')}</select><select data-t="${i}" data-f="emb" title="Emblema">${LOGO_EMBS.map((n,k)=>`<option value="${k}" ${logoIdx(t).e===k?'selected':''}>${n}</option>`).join('')}</select><input type="color" value="${t.color}" data-t="${i}" data-f="color" title="Color principal"><input type="color" value="${t.color2}" data-t="${i}" data-f="color2" title="Color secundario"></div>
     <input type="text" class="tname" maxlength="24" value="${esc(t.name)}" data-t="${i}" data-f="name">
     <div class="drvs">${t.drivers.map((d,j)=>`<div class="drv">
       <label title="Este piloto lo conduces tú"><input type="radio" name="pl" data-t="${i}" data-d="${j}" ${d.player?'checked':''}>Tú</label>
@@ -606,7 +627,7 @@ function openTeams(){
       <input type="number" min="0" max="100" value="${d.rating}" data-t="${i}" data-d="${j}" data-f="rating" title="Nivel 0–100" ${d.player?'disabled':''}>
     </div>${d.player?'':`<div class="drv trs">${[['agr','Agresivo',50],['def','Defensivo',50],['reg','Regular',50],['bru','Brusco',30]].map(([f,l,dv])=>`<label title="${l} (0–100)">${l.slice(0,3)}<input type="number" min="0" max="100" value="${d[f]==null?dv:d[f]}" data-t="${i}" data-d="${j}" data-f="${f}"></label>`).join('')}</div>`}`).join('')}</div></div>`).join('');
   $('teamsBody').innerHTML=`<h2>Equipos y pilotos</h2>
-  <p class="sub">8 escuderías de 2 pilotos. Con 8 o 12 coches corren las primeras (la tuya siempre). Nivel 0–100: cuanto más alto, más rápido. Carácter: <b>Agr</b>esivo (adelanta antes y se pega más), <b>Def</b>ensivo (tapa la línea en recta), <b>Reg</b>ular (alto: tiempos constantes; bajo: más rápido pero irregular), <b>Bru</b>sco (frena y acelera de golpe, gasta más rueda). Los cambios se guardan solos en este navegador.</p>
+  <p class="sub">11 escuderías de 2 pilotos (hasta 22 coches). Con menos coches corren las primeras (la tuya siempre). Escudo: elige forma y emblema; los colores son los del equipo. Nivel 0–100: cuanto más alto, más rápido. Carácter: <b>Agr</b>esivo (adelanta antes y se pega más), <b>Def</b>ensivo (tapa la línea en recta), <b>Reg</b>ular (alto: tiempos constantes; bajo: más rápido pero irregular), <b>Bru</b>sco (frena y acelera de golpe, gasta más rueda). Los cambios se guardan solos en este navegador.</p>
   ${CH?'<p class="sub" style="color:#ffb300;opacity:1">Hay un campeonato en curso: usa los equipos que había al crearlo. Estos cambios se aplicarán en carreras rápidas y en el próximo campeonato.</p>':''}
   ${rows}
   <details><summary>Exportar / importar (copia de seguridad)</summary>
@@ -617,6 +638,7 @@ function openTeams(){
   <div class="row2"><button class="btn2" id="tReset">Restablecer equipos</button><button class="go" id="tBack" style="margin-top:0">Hecho</button></div>`;
   $('teamsBody').oninput=e=>{
     const el=e.target,i=+el.dataset.t,f=el.dataset.f;if(isNaN(i)||!f)return;const t=TEAMS[i];
+    if(f==='shape'||f==='emb'){t[f]=+el.value;saveTeams();const lg=el.closest('.team').querySelector('svg.logo');if(lg)lg.outerHTML=teamLogo(t.name,t.color,t.color2,30);return;}
     if(f==='color'||f==='color2')t[f]=el.value;
     else if(f==='name')t.name=el.value;
     else if(f==='dname')t.drivers[+el.dataset.d].name=el.value;
@@ -631,8 +653,8 @@ function openTeams(){
   $('ioText').value=JSON.stringify({teams:TEAMS,champ:CH});
   $('ioCopy').onclick=()=>{const t=$('ioText');t.select();try{navigator.clipboard.writeText(t.value).then(()=>{$('ioMsg').textContent='Copiado. Pégalo en un archivo de texto para guardarlo.';},()=>{$('ioMsg').textContent='No se pudo copiar: selecciona el texto y cópialo a mano.';});}catch(e){$('ioMsg').textContent='Selecciona el texto y cópialo a mano.';}};
   $('ioImport').onclick=()=>{try{const o=JSON.parse($('ioText').value);if(!Array.isArray(o.teams)||!o.teams.length)throw 0;
-      TEAMS=o.teams.slice(0,8).map(t=>({name:String(t.name||'Equipo'),color:t.color||'#888888',color2:t.color2||'#ffffff',drivers:(t.drivers||[]).slice(0,2).map(d=>({name:String(d.name||'Piloto'),rating:clamp(+d.rating||50,0,100),player:!!d.player}))}));
-      TEAMS.forEach(t=>{while(t.drivers.length<2)t.drivers.push({name:'Piloto',rating:50});});
+      TEAMS=o.teams.slice(0,11).map(t=>({name:String(t.name||'Equipo'),color:t.color||'#888888',color2:t.color2||'#ffffff',shape:t.shape,emb:t.emb,drivers:(t.drivers||[]).slice(0,2).map(d=>({name:String(d.name||'Piloto'),rating:clamp(+d.rating||50,0,100),player:!!d.player}))}));
+      TEAMS.forEach(t=>{while(t.drivers.length<2)t.drivers.push({name:'Piloto',rating:94});});if(TEAMS.length<DEFAULT_TEAMS.length)TEAMS=TEAMS.concat(clone(DEFAULT_TEAMS.slice(TEAMS.length)));
       if(!TEAMS.some(t=>t.drivers.some(d=>d.player)))TEAMS[0].drivers[0].player=true;
       CH=o.champ||null;saveTeams();saveChamp();openTeams();$('ioMsg').textContent='Importado.';}
     catch(e){$('ioMsg').textContent='El texto no es una copia válida.';}};
@@ -653,6 +675,7 @@ function openChamp(){
   if(!CH){
     $('champBody').innerHTML=`<h2>Nuevo campeonato</h2>
     <p class="sub">Puntos: 25-18-15-12-10-8-6-4-2-1 y +1 por la vuelta rápida si acabas entre los 10 primeros. Se guarda en este navegador.</p>
+    ${meHtml()}
     <span class="fl">Calendario (pulsa para quitar o poner)</span>${segHtml('newChamp','tracks',TRACK_OPTS,true)}
     <div class="two">
       <div><span class="fl">Vueltas por carrera</span>${segHtml('newChamp','laps',OPT.laps)}</div>
@@ -673,7 +696,7 @@ function openChamp(){
       CH={tracks:newChamp.tracks.slice(),laps:newChamp.laps,diff:newChamp.diff,quali:newChamp.quali,mult:newChamp.mult,cars:newChamp.cars,damage:newChamp.damage,weather:newChamp.weather||'rand',weekend:newChamp.weekend,teams,round:0,drivers,history:[]};
       saveChamp();openChamp();
     };
-    $('cTeams').onclick=openTeams;$('cBack').onclick=openMenu;showOnly('champ');return;
+    meBind();$('cTeams').onclick=openTeams;$('cBack').onclick=openMenu;showOnly('champ');return;
   }
   const {drv,teams}=champTables(),done=CH.round>=CH.tracks.length;
   const cal=CH.tracks.map((ti,i)=>`<span class="${i<CH.round?'done':i===CH.round?'next':''}">${i+1}. ${esc(TRACKS[ti].short||TRACKS[ti].name)}</span>`).join('');
@@ -845,9 +868,13 @@ function applyChampResult(){
 
 // ---------- logos de escuderías (generados: forma + colores + iniciales) ----------
 const LOGOC={};
+/* v46: forma y emblema del escudo elegibles en el editor de equipos (t.shape, t.emb); si no, salen del nombre */
+const LOGO_SHAPES=['Escudo','Círculo','Hexágono','Rombo','Placa'],LOGO_EMBS=['Alas','Rayo','Ola','Estrella','Rayas','Galón','Cuadros','Sin emblema'];
+function logoHash(name){let h=0;for(const ch of (name||'?'))h=(h*31+ch.charCodeAt(0))>>>0;return h;}
+function logoIdx(t){const h=logoHash(t.name);return {s:t.shape!=null&&t.shape>=0&&t.shape<5?t.shape:h%5,e:t.emb!=null&&t.emb>=0&&t.emb<8?t.emb:(h>>>4)%5};}
+function logoOvr(name){for(const L of [TEAMS,CH&&CH.teams,CR&&CR.teams])if(L)for(const t of L)if(t&&t.name===name&&(t.shape!=null||t.emb!=null))return logoIdx(t);return null;}
 function teamLogo(name,c1,c2,size){
-  name=name||'?';const key=name+c1+c2+size;if(LOGOC[key])return LOGOC[key];
-  let h=0;for(const ch of name)h=(h*31+ch.charCodeAt(0))>>>0;
+  name=name||'?';const h=logoHash(name),ov=logoOvr(name)||{s:h%5,e:(h>>>4)%5};const key=name+c1+c2+size+'|'+ov.s+ov.e;if(LOGOC[key])return LOGOC[key];
   const ini=name.split(/\s+/).filter(w=>w.length>1&&!/^(gp|f1|team|racing)$/i.test(w)).map(w=>w[0].toUpperCase()).join('').slice(0,2)||name.slice(0,2).toUpperCase();
   const hx=x=>/^#[0-9a-f]{6}$/i.test(x||'')?x:'#888888';c1=hx(c1);c2=hx(c2);
   const lum=x=>{const n=parseInt(x.slice(1),16);return((n>>16)*0.3+((n>>8)&255)*0.59+(n&255)*0.11)/255;};
@@ -859,8 +886,11 @@ function teamLogo(name,c1,c2,size){
     `<path d="M56 14 L34 54 L50 54 L42 86 L68 42 L52 42 L60 14 Z" fill="${c2}" opacity=".8"/>`,
     `<path d="M10 46 Q30 30 50 40 Q70 30 90 46 Q70 40 50 52 Q30 40 10 46 Z" fill="${c2}" opacity=".85"/>`,
     `<path d="M50 14 L57 33 L78 34 L61 46 L67 66 L50 54 L33 66 L39 46 L22 34 L43 33 Z" fill="${c2}" opacity=".75"/>`,
-    `<path d="M14 72 L86 28 M14 82 L86 38" stroke="${c2}" stroke-width="7" opacity=".7"/>`][(h>>4)%5];
-  const sh=shapes[h%shapes.length];
+    `<path d="M14 72 L86 28 M14 82 L86 38" stroke="${c2}" stroke-width="7" opacity=".7"/>`,
+    `<path d="M18 30 L50 50 L82 30 L82 42 L50 62 L18 42 Z M18 50 L50 70 L82 50 L82 60 L50 80 L18 60 Z" fill="${c2}" opacity=".8"/>`,
+    `<path d="M0 0h20v20H0zM40 0h20v20H40zM80 0h20v20H80zM20 20h20v20H20zM60 20h20v20H60zM0 40h20v20H0zM40 40h20v20H40zM80 40h20v20H80zM20 60h20v20H20zM60 60h20v20H60zM0 80h20v20H0zM40 80h20v20H40zM80 80h20v20H80z" fill="${c2}" opacity=".55"/>`,
+    ''][ov.e];
+  const sh=shapes[ov.s];
   const svg=`<svg class="logo" width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs>
     <linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f6fa"/><stop offset=".5" stop-color="#7d8796"/><stop offset="1" stop-color="#dfe4ec"/></linearGradient>
     <linearGradient id="${id}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(c1,0.25)}"/><stop offset=".55" stop-color="${c1}"/><stop offset="1" stop-color="${shade(c1,-0.45)}"/></linearGradient>
@@ -872,7 +902,7 @@ function teamLogo(name,c1,c2,size){
   return LOGOC[key]=svg;
 }
 const LOGOIMG={};
-function logoImg(c){const k=(c.teamName||c.name)+c.color+c.color2;let im=LOGOIMG[k];
+function logoImg(c){const ov=logoOvr(c.teamName||c.name),k=(c.teamName||c.name)+c.color+c.color2+(ov?'|'+ov.s+ov.e:'');let im=LOGOIMG[k];
   if(!im){im=new Image();im.onload=()=>{TILES.forEach(v=>tileFree.push(v.c));TILES.clear();};im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(carLogo(c,64).replace('class="logo" ',''));LOGOIMG[k]=im;}
   return im.complete&&im.naturalWidth?im:null;}
 function carLogo(c,size){return teamLogo(c.teamName||c.name,c.color,c.color2,size||14);}
@@ -917,11 +947,22 @@ function goQualiOrRace(){ // del fin de semana: tras los libres
 }
 function beginSession(r){
   R=r;attract=false;paused=false;particles.length=0;CONF.length=0;LENS.length=0;GOUGES.length=0;HLT.clips=[];HLT.pending=[];HLT.last={};HLT.pos=null;HLT.ahead=null;ui.hlPlay=null;RB.buf.length=0;R.steerCfg={gain:settings.steerSens,rate:settings.steerRate};
-  Object.assign(ui,{celebT:null,qFast:0,qEnding:false,tele:null,resultsShown:false,endT:null,hudT:0,resT:0,msgT:0,record:loadRecord(R.tr.ti),pointsDone:false});
+  Object.assign(ui,{celebT:null,qFast:0,qSkip:false,qEnding:false,tele:null,resultsShown:false,endT:null,hudT:0,resT:0,msgT:0,record:loadRecord(R.tr.ti),pointsDone:false});
   cam.x=R.player.x;cam.y=R.player.y;cam.rot=-R.player.a-Math.PI/2;$('teleBox').innerHTML='';$('results').querySelector('.card').classList.remove('wide');
   showOnly(null);showHud(true);$('msg').style.display='none';
 }
+/* v46: daños de la clasificación. El morro se cambia gratis antes de la carrera. Suspensión o trasera muy tocadas,
+   o el alerón trasero o una rueda perdidos: piezas nuevas fuera del parque cerrado = 5 puestos de sanción. Coche destrozado: sale último.
+   Daño leve de suspensión o trasera: se arrastra a la carrera. */
+function qSaveDamage(){if(!R||!R.liveQ||!EV)return;EV.qDmg=EV.qDmg||{};for(const c of R.cars){const o=EV.qDmg[c.id]||{susp:0,rear:0,side:1};if((c.dSusp||0)>o.susp){o.susp=c.dSusp;o.side=c.suspSide||1;}o.rear=Math.max(o.rear,c.dRear||0);o.rw=o.rw||!!c.rwOff||c.wheelOff!=null;o.wreck=o.wreck||!!c.dnf;EV.qDmg[c.id]=o;}}
+function qDamagePenalties(){const D=EV.qDmg;if(EV.qPenDone)return EV.qPen||[];if(!D||!EV.grid)return [];EV.qPenDone=true;const out=EV.qPen=[];let g=EV.grid.slice();
+  const heavy=e=>{const o=D[e.id];return o&&!o.wreck&&(o.rw||o.susp>0.5||o.rear>0.5);};
+  for(let i=g.length-1;i>=0;i--){const e=g[i];if(heavy(e)){const ni=Math.min(g.length-1,i+5);g.splice(i,1);g.splice(ni,0,e);out.push({e,why:'Piezas nuevas: 5 puestos de sanción'});}}
+  const wr=g.filter(e=>D[e.id]&&D[e.id].wreck);g=g.filter(e=>!wr.includes(e)).concat(wr);wr.forEach(e=>out.push({e,why:'Chasis nuevo: sales último'}));
+  EV.grid=g;return out;}
+function qDamageCarry(r){const D=EV&&EV.qDmg;if(!D)return r;for(const c of r.cars){const o=D[c.id];if(!o||o.wreck||o.rw||o.susp>0.5||o.rear>0.5)continue;if(o.susp>0.02){c.dSusp=o.susp;c.suspSide=o.side||1;}if(o.rear>0.02)c.dRear=o.rear;}return r;}
 function startQuali(){
+  if(!EV.qfmt||!EV.qs){EV.qDmg={};EV.qPenDone=false;}
   if(settings.qlive!==0){ /* v45: clasificación en directo: todos en pista, tú decides cuándo salir */
     const grid=EV.qfmt?qAlive():EV.roster;
     beginSession(makeSession({drsManual:settings.drsAuto!==1,track:EV.track,laps:99,mult:0,mode:'quali',liveQ:true,qTime:(settings.qlen||5)*60,fx:true,est:EV.est,steerMode:EV.steer,weather:EV.weather,weatherSeed:EV.seed+EV.qs*13,aids:EV.aids,damage:EV.damage!==false,playerWing:EV.wing,playerSetup:EV.setup,qualiCompound:'S',grid}));
@@ -938,6 +979,7 @@ function startPractice(){
 function preRace(){
   const tr=R&&R.tr&&R.tr.ti===EV.track?R.tr:buildTrack(EV.track),dur=EV.est.lap*EV.laps*1.05;
   let fc=[];if(EV.weather!=='dry'){const Wt=makeWeather(tr,EV.weather,EV.seed+1);
+    Wt.fc=0; /* la previsión no sabe de las sorpresas */
     for(let t=0;t<=dur;t+=dur/48){Wt.t=t;let w=0,n=0;for(let i=0;i<tr.N;i+=20){if(rainAt(Wt,tr.xs[i],tr.ys[i])>0.25)w++;n++;}fc.push(w/n);}
     fc=fc.map((v,i)=>(v+(fc[i-1]??v)+(fc[i+1]??v))/3);} // suavizada: es una previsión, no una certeza
   const rec=fuelFor(EV.laps,EV.est),fpl=EV.est.fuel*1.06;if(typeof EV.fuelL!=='number')EV.fuelL=Math.min(TANK,Math.round(EV.fuel==='half'?fuelFor(Math.ceil(EV.laps/2),EV.est):rec));
@@ -960,8 +1002,12 @@ function preRace(){
   $('preGo').onclick=()=>{EV.fuel=EV.fuelL;startRace(true);};$('preBack').onclick=leaveToMenu;
   ui.resultsShown=true;paused=false;showOnly('prerace');}
 function startRace(go){
+  const qPen=qDamagePenalties(); /* antes de la previa, para que la parrilla ya salga con las sanciones */
   if(!go)return preRace();
-  beginSession(careerApply(makeSession({drsManual:settings.drsAuto!==1,playerEng:(EV.champ&&CH&&CH.career&&CR)?(CR.eng==null?1:CR.eng):null,track:EV.track,laps:EV.laps,mult:EV.mult,mode:'race',fx:true,est:EV.est,steerMode:EV.steer,aids:EV.aids,noSC:!settings.scOn,formation:EV.formation!=null?EV.formation:!!settings.formation,sets:EV.weekend?EV.sets:null,incidents:EV.incidents!=null?EV.incidents:settings.incidents==null?2:settings.incidents,damage:EV.damage!==false,weather:EV.weather,weatherSeed:EV.seed+1,playerWing:EV.wing,playerSetup:EV.setup,grid:EV.grid,playerFuel:EV.fuel,playerCompound:EV.comp})));
+  beginSession(qDamageCarry(careerApply(makeSession({drsManual:settings.drsAuto!==1,playerEng:(EV.champ&&CH&&CH.career&&CR)?(CR.eng==null?1:CR.eng):null,track:EV.track,laps:EV.laps,mult:EV.mult,mode:'race',fx:true,est:EV.est,steerMode:EV.steer,aids:EV.aids,noSC:!settings.scOn,formation:EV.formation!=null?EV.formation:!!settings.formation,sets:EV.weekend?EV.sets:null,incidents:EV.incidents!=null?EV.incidents:settings.incidents==null?2:settings.incidents,damage:EV.damage!==false,weather:EV.weather,weatherSeed:EV.seed+1,playerWing:EV.wing,playerSetup:EV.setup,grid:EV.grid,playerFuel:EV.fuel,playerCompound:EV.comp}))));
+  {const me=qPen.find(x=>x.e.isPlayer),o=EV.qDmg&&EV.qDmg[R.player.id];
+   if(me)flash('Daños de la clasificación',me.why,4);else if(o&&(o.susp>0.02||o.rear>0.02)&&!o.wreck)flash('Daños de la clasificación','Sales con la '+(o.susp>0.02?'suspensión':'trasera')+' tocada',4);
+   else if(qPen.length)flash('Sanciones en parrilla',qPen.map(x=>x.e.name).join(', ')+': cambio de piezas',4);}
 }
 function qualiList(){
   if(R&&R.liveQ)return R.cars.map(c=>({e:(EV&&EV.roster.find(x=>x.id===c.id))||c,t:c.bestLap==null?Infinity:c.bestLap})).sort((a,b)=>a.t-b.t);
@@ -977,6 +1023,7 @@ function qAlive(){const out=new Set(EV.qOut.flat().map(x=>x.e));return EV.roster
 function qCut(){const n=EV.roster.length;return Math.round(n*0.25);}
 function qBotsOnly(st){const al=qAlive();return al.map(e=>({e,t:e.isPlayer?Infinity:EV.qT[st][e.id]})).sort((a,b)=>a.t-b.t);}
 function endQuali(){
+  qSaveDamage();
   if(EV.qfmt&&EV.qs<2){const list=qualiList(),cut=qCut(),keep=list.length-cut,out=list.slice(keep),me=list.findIndex(x=>x.e.isPlayer);
     EV.qOut.push(out);
     // si te quedas fuera, se simulan las sesiones que faltan sin ti
@@ -1023,7 +1070,7 @@ function setPaused(v){
 }
 function restartSession(){if(!EV)return;if(R.practice)startPractice();else if(R.mode==='quali')startQuali();else startRace(true);}
 $('resume').onclick=()=>setPaused(false);
-$('restart1').onclick=restartSession;$('replay1').onclick=()=>{showOnly(null);paused=false;startReplay();};$('endq').onclick=()=>{if(R&&R.liveQ){const p=R.player;if(!p.pit){p.pit='service';p.pitT=1e9;p.vx=p.vy=0;p.qFly=false;}if(!R.liveQ.flag){R.liveQ.t=Math.max(R.liveQ.t,R.liveQ.T-1);}ui.qFast=2;showOnly(null);paused=false;return;}if(R.practice&&EV.weekend){EV.stage='quali';showOnly(null);paused=false;goQualiOrRace();}else endQuali();};$('tomenu1').onclick=leaveToMenu;
+$('restart1').onclick=restartSession;$('replay1').onclick=()=>{showOnly(null);paused=false;startReplay();};$('endq').onclick=()=>{if(R&&R.liveQ){const p=R.player;if(!p.pit){p.pit='service';p.pitT=1e9;p.vx=p.vy=0;p.qFly=false;}p.qDone=true;ui.qSkip=true;ui.qFast=0;flash('Terminas tu sesión','Se simula el resto: los rivales completan sus vueltas',2.5);showOnly(null);paused=false;return;}if(R.practice&&EV.weekend){EV.stage='quali';showOnly(null);paused=false;goQualiOrRace();}else endQuali();};$('tomenu1').onclick=leaveToMenu;
 // v45: pantalla completa. En Android/PC se pide al navegador (y se gira a horizontal); en iPhone Safari no lo permite en páginas web:
 // se explica cómo añadir el juego a la pantalla de inicio, que lo abre sin barras. Abierto desde ese icono, el botón no hace falta.
 const IS_IOS=/iP(hone|od|ad)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -1082,7 +1129,7 @@ function openPitMenu(){
   $('pitmenu').classList.remove('hidden');}
 // v45: panel del garaje en la clasificación en directo: tiempo que queda, tu posición, neumático, salir y acelerar el reloj
 function garageUpdate(){
-  let el=$('garage');const p=R&&R.player,L=R&&R.liveQ,show=!!(L&&p&&p.pit==='service'&&!L.end&&!ui.resultsShown);
+  let el=$('garage');const p=R&&R.player,L=R&&R.liveQ,show=!!(L&&p&&p.pit==='service'&&!L.end&&!ui.resultsShown&&!ui.qSkip);
   if(!el){el=document.createElement('div');el.id='garage';el.className='panel';$('hud').appendChild(el);
     el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!R||!R.liveQ)return;const p=R.player;
       if(b.dataset.gc){ui.gComp=b.dataset.gc;p.nextCompound=ui.gComp;}
@@ -1275,8 +1322,11 @@ function fxFrame(dt){
     else if(ev.type==='verdict'&&!attract&&(ev.car.isPlayer||ev.victim.isPlayer)){
       if(ev.car.isPlayer){if(ev.pen){flash('Penalización +'+ev.pen+' s','Has provocado un accidente con '+ev.victim.name,2.4);radioSay('Los comisarios nos dan '+ev.pen+' segundos por el toque con '+ev.victim.name+'.',null,0,true);}else radioSay('Sin sanción por el toque, pero cuidado.','v0',10);}
       else if(ev.pen)radioSay(ev.car.name+' recibe '+ev.pen+' segundos por el toque contigo.','vp',10);}
+    else if(ev.type==='wxsurprise'&&!attract){if(ev.kind==='shower'){flash('🌧 Chaparrón inesperado','No salía en el radar',2.5);radioSay('¡Ojo! Se está formando un chaparrón que no salía en el radar.','wxs',0,true);}else{flash('🌤 Está escampando','Antes de lo previsto',2.5);radioSay('Está escampando antes de lo que decía el radar. La pista se irá secando.','wxc',0,true);}}
     else if(ev.type==='qflag'&&!attract){flash('🏁 Bandera a cuadros','Vale la vuelta que tengas empezada',2.5);radioSay('Bandera a cuadros. Si estás en vuelta rápida, termínala: cuenta.','qf',0,true);}
     else if(ev.type==='sc_rolling'&&!attract){flash('Salida lanzada','Demasiada agua: se sale detrás del safety car',3);radioSay('Salida detrás del safety car por la lluvia. Calienta las gomas y no adelantes.',null,0,true);}
+    else if(ev.type==='unlap'&&!attract){flash('Puedes desdoblarte','Adelanta al safety car y recupera la vuelta',3);radioSay('Los doblados pueden adelantar al safety car. Pásalo y recupera la vuelta.','unl',0,true);}
+    else if(ev.type==='unlap_all'&&!attract){radioSay(ev.n===1?'Un doblado va a pasar al safety car para recuperar la vuelta.':ev.n+' doblados van a pasar al safety car para recuperar la vuelta.','unla',30);}
     else if(ev.type==='blue'&&!attract){radioSay('Bandera azul. '+ev.who+' te va a doblar, déjale pasar.','blue',12,true);}
     else if(ev.type==='blue_pen'&&!attract){flash('Penalización +5 s','No has respetado la bandera azul',2.2);radioSay('Penalización por ignorar las azules. Hay que dejar pasar.',null,0,true);}
     else if(ev.type==='sc_out'&&!attract){flash('SAFETY CAR','Sin adelantamientos · en fila detrás',3);radioSay('Safety car, safety car. No adelantes. Si necesitas parar, es buen momento.',null,0,true);}
@@ -1945,6 +1995,7 @@ function photoImg(tr){const P=tr.photo,mob=document.body.classList.contains('tou
   const out=set.map(t=>({t,im:loadPhoto(t.src)})).filter(o=>o.im.complete&&o.im.naturalWidth&&!o.im.failed);
   return out.length?out:null;}
 function drawStatic(ctx,G,tr,bx0,by0,bx1,by1){ // capa estática del circuito (se cachea en baldosas)
+  const PAT=texSet(tr);
   const ph=tr.photo&&photoImg(tr);
   ctx.fillStyle=PAT.grass;ctx.fillRect(bx0,by0,bx1-bx0,by1-by0);
   if(ph){ // foto aérea real (PNOA): recorta la parte de cada imagen que cae en esta baldosa
@@ -2147,7 +2198,9 @@ function render(dt){
     const r=rot?cam.rot:0,cr=Math.cos(r),sr=Math.sin(r);
     for(const c of R.cars){if(c.isPlayer||c.dnf)continue;const dx=(c.x-cam.x)*z,dy=(c.y-cam.y)*z;if(dx*dx+dy*dy>380*380)continue;
       const sx=cx+dx*cr-dy*sr,sy=cy+dx*sr+dy*cr-26;
-      ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillText(c.name,sx+1,sy+1);ctx.fillStyle='#fff';ctx.fillText(c.name,sx,sy);}
+      ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillText(c.name,sx+1,sy+1);ctx.fillStyle='#fff';ctx.fillText(c.name,sx,sy);
+      if(c.blueT&&R.t-c.blueT<1.5){const w=ctx.measureText(c.name).width/2+6,fl=Math.sin(performance.now()/90)*2; /* v46: bandera azul al doblado que se aparta */
+        ctx.fillStyle='#ddd';ctx.fillRect(sx-w-1,sy-14,1.6,16);ctx.fillStyle='#1f6fff';ctx.beginPath();ctx.moveTo(sx-w,sy-14);ctx.lineTo(sx-w-14,sy-12+fl);ctx.lineTo(sx-w-13,sy-5+fl);ctx.lineTo(sx-w,sy-7);ctx.closePath();ctx.fill();}}
   }
   drawRainOverlay(dt);
   if(!attract&&!ui.replay)drawSpeedFX(cx,cy,dt);
@@ -2599,6 +2652,7 @@ function boardHtml(){
   return '<div class="hd">Carrera · '+(intv?'intervalo':'al líder')+'</div>'+pickRows(R.standings,c=>c.isPlayer).map(([c,i])=>{
     let g='';
     if(c.dnf)g=c.dnfReason||'Abandono';else if(c.pit)g='BOX';
+    else if(i>0&&c.finished&&lead.finished){const ref=intv?R.standings[i-1]:lead;g='+'+(c.finishTime-ref.finishTime).toFixed(1);} /* v46: con la carrera acabada, la diferencia real en meta */
     else if(i>0){const ref=intv?R.standings[i-1]:lead,d=ref.prog-c.prog;g=d>R.tr.N?'+'+Math.floor(d/R.tr.N)+'v':'+'+(d*R.tr.sp/Math.max(180,Math.hypot(c.vx,c.vy))).toFixed(1);}
     return `<div class="row${c.isPlayer?' me':''}${c.dnf?' out':''}"><span style="width:18px">${i+1}</span>${carLogo(c,13)}${tyIco(c.compound)}<span>${esc(c.name)}</span><span class="g">${g}</span></div>`;
   }).join('');
@@ -2652,6 +2706,7 @@ function teleHtml(){const T=ui.tele;if(!T||!T.laps.length)return '';const L=T.la
     <div class="hint">Verde en la gráfica de temperatura = ventana ideal del ${C.name.toLowerCase()}. Bajo la velocidad: verde gas, rojo freno.</div></details>`;}
 function showRaceResults(){
   finishAll();
+  try{$('board').innerHTML=boardHtml();}catch(e){} /* v46: el tablero de la izquierda pasa a mostrar la clasificación final */
   ui.resultsShown=true;
   applyChampResult();
   const p=R.player,pos=R.standings.indexOf(p)+1;
@@ -2740,7 +2795,7 @@ function updateHud(dt){
         if(ui.radar&&COMPACT)warn.push('<span style="color:#7fb8ff">📡 '+ui.radar+'</span>');
         bl=(warn.length?warn.join('<br>')+'<br>':'')+(COMPACT?'<span style="opacity:.6">paradas: '+p.stops+'</span>':'<div class="keys"><span><kbd>B</kbd> boxes</span><span><kbd>1</kbd>-<kbd>5</kbd> neumático</span><span><kbd>E</kbd> KERS</span><span><kbd>F</kbd> DRS</span><span><kbd>Q</kbd> motor</span><span><kbd>C</kbd> cámara</span><span><kbd>T</kbd> repetición</span><span><kbd>M</kbd> sonido</span><span><kbd>P</kbd> pausa</span><span>paradas: '+p.stops+'</span></div>');
       }
-    }else if(R.mode==='quali')bl=R.practice?'<span style="opacity:.6">Entrenamientos libres · P → salir</span>':'<span style="opacity:.6">Blandos nuevos · poca gasolina · P → terminar</span>';
+    }else if(R.mode==='quali')bl=R.practice?'<span style="opacity:.6">Entrenamientos libres · P → salir</span>':R.liveQ?(ui.qSkip?'<span style="opacity:.6">Simulando el resto de la sesión…</span>':'<span style="opacity:.6">BOX → garaje · P → pausa</span>'):'<span style="opacity:.6">Blandos nuevos · poca gasolina · P → terminar</span>';
     if(COMPACT&&R.weather&&R.weather.type!=='dry'){const rr=rainAt(R.weather,p.x,p.y),pw=p.wet||0;
       const sky=rr<0.05?'☁ Sin lluvia':rr<0.35?'🌦 Llovizna':rr<0.7?'🌧 Lluvia':'⛈ Aguacero';
       const want=pw>0.62?'W':pw>0.2?'I':null,cw=COMPOUNDS[p.compound].wet;
@@ -2764,6 +2819,7 @@ function frameInner(now){
   if(R&&!paused){
     // v45: cámara lenta breve en los accidentes cercanos
     const slow=(ui.slowT||0)>0?0.3:1;if(slow<1)ui.slowT-=dt;
+    if(ui.qSkip&&R.liveQ&&!R.liveQ.end){const t0=performance.now();while(performance.now()-t0<25&&!R.liveQ.end){for(let i=0;i<60;i++)stepRace(R,1/120);R.events.length=0;}}
     const qfast=R.liveQ&&ui.qFast&&R.player.pit==='service'?(ui.qFast===2?8:4):1;
     acc+=dt*slow*qfast;const h=1/120;let n=0;
     while(acc>=h&&n<12*qfast){stepRace(R,h);if((++ui.skCount)%3===0)recordSkids();acc-=h;n++;}

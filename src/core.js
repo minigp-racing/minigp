@@ -3,7 +3,7 @@ const VMAX=600, ACC=440, BRAKE=540, REV_ACC=260, REV_MAX=120;
 const STEER=3.4, STEER_LOSS=0.42, A_LAT=1250, K_LAT=16;
 const W=60, RUNOFF=230, SP=10, KMH=0.55;
 const HL=19, HW=7.5, INERTIA=(4*HL*HL+4*HW*HW)/12, CARW=2*HW; // coche a escala real: 5,6 m × 2 m (6,5 px/m)
-const BOTDEC=0.74; // fracción de la frenada máxima que usan los bots
+const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97; // fracción de la frenada máxima que usan los bots
 const PIT_LAT=W+65, PIT_BOX=W+99, PIT_V=150, PIT_HALF=26, BOT_BRAKE=BRAKE*0.66;
 // modos de motor: ahorro / normal / ataque
 const EMODES=[{n:'Ahorro',p:0.965,heat:0.55,fuel:0.88,wear:0.5},{n:'Normal',p:1,heat:1,fuel:1,wear:1},{n:'Ataque',p:1.035,heat:1.5,fuel:1.12,wear:2.2}];
@@ -141,13 +141,25 @@ function buildTrack(ti){
   for(let i=0;i<N;i++){const ak=Math.abs(k[i])+1e-6;vA[i]=Math.min(VMAX,STEER/(1.3*ak+STEER*STEER_LOSS/VMAX),Math.sqrt(0.86*A_LAT/ak));}
   for(let i=0;i<N;i++){let m=1e9;for(let d=-4;d<=4;d++)m=Math.min(m,vA[(i+d+N)%N]);vLim[i]=m;}
   for(let r=0;r<3;r++)for(let i=N-1;i>=0;i--){const v=vLim[(i+1)%N];vLim[i]=Math.min(vLim[i],Math.sqrt(v*v+2*BOT_BRAKE*sp));}
+  /* v46: trazada ideal. Los bots iban por el centro de la pista y un humano, abriéndose y buscando el vértice, pasaba mucho más rápido.
+     Camino de curvatura mínima dentro de la pista (suavizado de 4.º orden a varias escalas), con margen para los bordillos. */
+  const rl=new Float64Array(N),RX=new Float64Array(N),RY=new Float64Array(N),LM=RL_MAX;
+  {const Px=i=>xs[i]+nx[i]*rl[i],Py=i=>ys[i]+ny[i]*rl[i];
+   for(const st of [12,6,3,2,1])for(let it=0;it<(st===1?300:120);it++)for(let i=0;i<N;i++){const a=(i-st+N)%N,b=(i+st)%N,a2=(i-2*st+N)%N,b2=(i+2*st)%N;
+     const mx=(4*(Px(a)+Px(b))-Px(a2)-Px(b2))/6,my=(4*(Py(a)+Py(b))-Py(a2)-Py(b2))/6;
+     rl[i]=clamp((mx-xs[i])*nx[i]+(my-ys[i])*ny[i],-LM,LM);}
+   for(let i=0;i<N;i++){RX[i]=Px(i);RY[i]=Py(i);}}
+  const angR=new Float64Array(N),segR=new Float64Array(N);
+  for(let i=0;i<N;i++){const p=(i-1+N)%N,q=(i+1)%N;angR[i]=Math.atan2(RY[q]-RY[p],RX[q]-RX[p]);segR[i]=Math.hypot(RX[q]-RX[i],RY[q]-RY[i]);}
   const vLimS=new Float64Array(N);{const cc=0.9*G*AERO/(VMAX*VMAX);const vS=new Float64Array(N);
-    const kw=new Float64Array(N);for(let i=0;i<N;i++)kw[i]=Math.abs(angNorm(ang[(i+9)%N]-ang[(i-9+N)%N]))/(18*sp); // curvatura media (filtra ruido GPS)
-    for(let i=0;i<N;i++){const ak=Math.max(kw[i],Math.abs(k[i])*0.6);vS[i]=ak<=cc?VMAX*1.05:Math.min(VMAX*1.05,Math.sqrt(0.82*G*MECH/(ak-cc)));}
+    const kw=new Float64Array(N),kR=new Float64Array(N);for(let i=0;i<N;i++){const a=(i-9+N)%N,b=(i+9)%N,a4=(i-4+N)%N,b4=(i+4)%N;
+      kw[i]=Math.abs(angNorm(angR[b]-angR[a]))/Math.max(1,Math.hypot(RX[b]-RX[a],RY[b]-RY[a])); // curvatura media de la trazada (filtra ruido GPS)
+      kR[i]=Math.abs(angNorm(angR[b4]-angR[a4]))/Math.max(1,Math.hypot(RX[b4]-RX[a4],RY[b4]-RY[a4]));}
+    for(let i=0;i<N;i++){const ak=Math.max(kw[i],kR[i]*0.6);vS[i]=ak<=cc?VMAX*1.05:Math.min(VMAX*1.05,Math.sqrt(BOTCRN*G*MECH/(ak-cc)));}
     for(let i=0;i<N;i++){let m=1e9;for(let d=-4;d<=4;d++)m=Math.min(m,vS[(i+d+N)%N]);vLimS[i]=m;}
     var vCornS=Float32Array.from(vLimS); // velocidad de paso por curva, sin la frenada (para la frenada tardía de los bots)
-    var vWetS=Float64Array.from(vLimS);for(let r=0;r<3;r++)for(let i=N-1;i>=0;i--){const v=vWetS[(i+1)%N],dec=0.5*G*(2.7+3.5*Math.min(1,v*v/(VMAX*VMAX)));vWetS[i]=Math.min(vWetS[i],Math.sqrt(v*v+2*dec*sp));} // frenada prudente en mojado
-    for(let r=0;r<3;r++)for(let i=N-1;i>=0;i--){const v=vLimS[(i+1)%N],dec=BOTDEC*G*(2.7+3.5*Math.min(1,v*v/(VMAX*VMAX))); /* frenada fuerte y tardía */vLimS[i]=Math.min(vLimS[i],Math.sqrt(v*v+2*dec*sp));}}
+    var vWetS=Float64Array.from(vLimS);for(let r=0;r<3;r++)for(let i=N-1;i>=0;i--){const v=vWetS[(i+1)%N],dec=0.5*G*(2.7+3.5*Math.min(1,v*v/(VMAX*VMAX)));vWetS[i]=Math.min(vWetS[i],Math.sqrt(v*v+2*dec*segR[i]));} // frenada prudente en mojado
+    for(let r=0;r<3;r++)for(let i=N-1;i>=0;i--){const v=vLimS[(i+1)%N],dec=BOTDEC*G*(2.7+3.5*Math.min(1,v*v/(VMAX*VMAX))); /* frenada fuerte y tardía */vLimS[i]=Math.min(vLimS[i],Math.sqrt(v*v+2*dec*segR[i]));}}
   const corner=new Uint8Array(N);
   for(let i=0;i<N;i++){for(let d=-8;d<=8;d++)if(Math.abs(k[(i+d+N)%N])>1/1000){corner[i]=1;break;}}
   // escapatorias exteriores de las curvas: grava o asfalto/hormigón (como en los circuitos modernos); por dentro, hierba
@@ -156,7 +168,7 @@ function buildTrack(ti){
    for(let q=0;q<N;q++){const i=(q0+q)%N;if(corner[i]&&!corner[(i-1+N)%N]){
      let e=i,sgn=0,km=0;while(corner[e%N]&&e-i<N){const kk=k[e%N];if(Math.abs(kk)>km){km=Math.abs(kk);sgn=-Math.sign(kk);}e++;}
      const type=R2()<0.65?2:1;for(let j=i-6;j<e+(type===2?22:10);j++){const jj=((j%N)+N)%N;outSide[jj]=sgn;outSurf[jj]=type;}}}}
-  const tr={vCorn:(typeof vCornS!=="undefined"?vCornS:null),vWet:(typeof vWetS!=="undefined"?vWetS:null),name:def.name,country:def.country,ti,N,sp,len,xs,ys,tx,ty,nx,ny,ang,k,vLim,vLimS,corner,outSide,outSurf};
+  const tr={rl,vCorn:(typeof vCornS!=="undefined"?vCornS:null),vWet:(typeof vWetS!=="undefined"?vWetS:null),name:def.name,country:def.country,ti,N,sp,len,xs,ys,tx,ty,nx,ny,ang,k,vLim,vLimS,corner,outSide,outSurf};
   // charcos: mismos que dibuja el juego (misma semilla); se llenan cuando hay mucha agua en ese punto
   {const Rp=rng(ti*97+3),pud=[];for(let q=0;q<Math.round(N/12);q++){const i=Math.floor(Rp()*N),lat=(Rp()-0.5)*2*(W-18);const rx=14+Rp()*26,ry=8+Rp()*12;Rp();pud.push({i,lat,rx,ry,th:0.45+Rp()*0.4});}
    tr.pud=pud;tr.pudIdx=new Map();for(const p of pud){const n=Math.ceil(p.rx/sp)+1;for(let d=-n;d<=n;d++){const j=((p.i+d)%N+N)%N;if(!tr.pudIdx.has(j))tr.pudIdx.set(j,[]);tr.pudIdx.get(j).push(p);}}}
@@ -241,16 +253,26 @@ function makeWeather(tr,type,seed){
     Wt.cells.push(big?{x0:cx-Math.cos(wa)*back,y0:cy-Math.sin(wa)*back,r:diag*(0.75+Rr()*0.3),int:0.75+Rr()*0.35}
       :{x0:cx-Math.cos(wa)*back+px*side,y0:cy-Math.sin(wa)*back+py*side,r:1800+Rr()*2200,int:type==='rain'?0.3+Rr()*0.35:0.55+Rr()*0.5});
   }
+  /* v46: sorpresas contra la previsión. Chaparrón que se forma encima del circuito (el radar no lo ve hasta que nace)
+     o nubes que se deshacen / lluvia que para antes de tiempo (el radar daba que seguiría). */
+  Wt.sur=[];
+  if(type==='var'&&Rr()<0.45){const t0=50+Rr()*380,pxs=b.minX+(0.25+0.5*Rr())*(b.maxX-b.minX),pys=b.minY+(0.25+0.5*Rr())*(b.maxY-b.minY),dur=150+Rr()*200;
+    Wt.cells.push({x0:pxs-Wt.wx*(t0+dur*0.35),y0:pys-Wt.wy*(t0+dur*0.35),r:1700+Rr()*1600,int:0.75+Rr()*0.45,born:t0,die:t0+dur,hid:true});Wt.sur.push({t:t0,kind:'shower'});}
+  if(type==='var'&&Rr()<0.3){const c=Wt.cells[Math.floor(Rr()*Math.min(3,Wt.cells.length))];if(c&&!c.hid){c.die=60+Rr()*300;c.hid=true;Wt.sur.push({t:c.die,kind:'clear'});}}
+  if(type==='rain'&&Rr()<0.3){Wt.clearT=120+Rr()*360;for(const c of Wt.cells){c.die=Wt.clearT+Rr()*40;c.hid=true;}Wt.sur.push({t:Wt.clearT,kind:'clear'});}
   Wt.zoneS=new Float32Array(tr.N);Wt.rainS=new Float32Array(tr.N);
   for(let i=0;i<tr.N;i++)Wt.zoneS[i]=zoneAt(Wt,tr.xs[i],tr.ys[i]);
   return Wt;
 }
 function zoneAt(Wt,x,y){let z=1;for(const q of Wt.zones){const d2=((x-q.x)**2+(y-q.y)**2)/(q.r*q.r);if(d2<4)z+=q.f*Math.exp(-d2);}return clamp(z,0.45,1.6);}
 function cellPos(Wt,c){return [c.x0+Wt.wx*Wt.t,c.y0+Wt.wy*Wt.t];}
+/* cuánto existe una nube en el instante t (nace en ~70 s y se deshace en ~90 s). El radar (previsión) solo sabe lo que hay ahora */
+function cellLife(Wt,c,t){if(c.born==null&&c.die==null)return 1;const tk=Wt.fc!=null&&c.hid?Wt.fc:t;let f=1;
+  if(c.born!=null)f=Math.min(f,clamp((tk-c.born)/70,0,1));if(c.die!=null)f=Math.min(f,clamp(1-(tk-c.die)/90,0,1));return f;}
 function rainAt(Wt,x,y,zone){
   if(!Wt||Wt.type==='dry')return 0;
-  let r=Wt.type==='rain'?0.42+0.18*Math.sin(Wt.t/38):0;
-  for(const c of Wt.cells){const [px,py]=cellPos(Wt,c),d=Math.hypot(x-px,y-py)/c.r;if(d<1)r+=c.int*smooth(1-d);}
+  let r=Wt.type==='rain'?(0.42+0.18*Math.sin(Wt.t/38))*(Wt.clearT!=null?clamp(1-((Wt.fc!=null?Wt.fc:Wt.t)-Wt.clearT)/120,0,1):1):0;
+  for(const c of Wt.cells){const lf=cellLife(Wt,c,Wt.t);if(lf<=0)continue;const [px,py]=cellPos(Wt,c),d=Math.hypot(x-px,y-py)/c.r;if(d<1)r+=c.int*lf*smooth(1-d);}
   return clamp(r*(zone==null?zoneAt(Wt,x,y):zone),0,1.1);
 }
 // agua media prevista en la pista en los instantes indicados (s desde ahora): lo que “ve” el radar del equipo
@@ -260,12 +282,13 @@ function wetNeed(R,c){if(!R.weather||R.weather.type==='dry')return 0;const lap=(
   return 0.35*now+0.65*f;} // lo que importa es el agua que habrá durante el próximo stint, no la de este instante
 function compoundFor(R,c,k){const w=wetNeed(R,c);if(w>0.58)return 'W';if(w>0.17)return COMPOUNDS[k].wet?k:'I';
   if(COMPOUNDS[k].wet&&w<0.07)return chooseCompound(Math.max(1,lapsLeft(R,c)-1),R.est,Math.random());return k;}
-function forecastWet(R,times){const Wt=R.weather,tr=R.tr,t0=Wt.t;let m=0;
+function forecastWet(R,times){const Wt=R.weather,tr=R.tr,t0=Wt.t;let m=0;Wt.fc=t0;
   for(const dt of times){Wt.t=t0+dt;let s=0,n=0;for(let i=0;i<tr.N;i+=6){s+=Math.min(1,rainAt(Wt,tr.xs[i],tr.ys[i],Wt.zoneS[i])*1.35);n++;}m=Math.max(m,s/n);}
-  Wt.t=t0;return m;}
+  Wt.t=t0;Wt.fc=null;return m;}
 function stepWeather(R,dt){
   const Wt=R.weather;if(!Wt||Wt.type==='dry')return;
   Wt.t+=dt;Wt.acc+=dt;
+  if(Wt.sur)for(const q of Wt.sur)if(!q.done&&Wt.t>=q.t+(q.kind==='shower'?25:30)){q.done=true;if(R.fx)R.events.push({type:'wxsurprise',kind:q.kind});}
   if(Wt.acc<0.2)return;const h=Wt.acc;Wt.acc=0;
   const tr=R.tr,water=R.water;let sum=0;
   for(let i=0;i<tr.N;i++){
@@ -302,17 +325,17 @@ function driverTraits(d){
   for(const k of ['agr','def','reg','bru'])if(d[k]!=null)t[k]=d[k]/100;
   return t;}
 const DEFAULT_TEAMS=[
-  {name:'Tu Escudería',color:'#e10600',color2:'#ffffff',drivers:[{name:'Tú',rating:100,player:true},{name:'C. Ruiz',style:'cuidadoso',rating:76}]},
-  {name:'Azur GP',color:'#1e5bc6',color2:'#ffd23f',drivers:[{name:'M. Ortega',style:'metronomo',rating:96},{name:'L. Varga',style:'defensor',rating:88}]},
-  {name:'Naranja Motorsport',color:'#ff8700',color2:'#1a1a1a',drivers:[{name:'K. Tanaka',style:'agresivo',rating:93},{name:'S. Moreau',style:'rompe',rating:84}]},
-  {name:'Turquesa Racing',color:'#00a19c',color2:'#ffffff',drivers:[{name:'J. Lindqvist',style:'cuidadoso',rating:90},{name:'R. Costa',style:'irregular',rating:80}]},
-  {name:'Violeta Team',color:'#6c3bd1',color2:'#ffffff',drivers:[{name:'A. Novak',style:'defensor',rating:82},{name:'P. Silva',style:'agresivo',rating:74}]},
-  {name:'Verde Bosque',color:'#2bb24c',color2:'#ffffff',drivers:[{name:'T. Becker',style:'metronomo',rating:78},{name:'D. Moretti',style:'irregular',rating:70}]},
-  {name:'Sol Racing',color:'#ffd23f',color2:'#1a1a1a',drivers:[{name:'H. Kim',style:'agresivo',rating:72},{name:'E. Laurent',style:'defensor',rating:64}]},
-  {name:'Acero F1',color:'#c9ced4',color2:'#e10600',drivers:[{name:'N. Ivanov',style:'rompe',rating:66},{name:'F. Duarte',style:'irregular',rating:58}]},
-  {name:'Granate Corse',color:'#8e1b3a',color2:'#f2c14e',drivers:[{name:'G. Rossi',style:'agresivo',rating:68},{name:'M. Haas',style:'cuidadoso',rating:60}]},
-  {name:'Polar Racing',color:'#e8f1ff',color2:'#0a3d91',drivers:[{name:'O. Nyström',style:'metronomo',rating:63},{name:'B. Okafor',style:'irregular',rating:56}]},
-  {name:'Coral Motorsport',color:'#ff5a6e',color2:'#14213d',drivers:[{name:'I. Petrova',style:'defensor',rating:61},{name:'L. Méndez',style:'rompe',rating:52}]}
+  {name:'Tu Escudería',color:'#e10600',color2:'#ffffff',drivers:[{name:'Tú',rating:100,player:true},{name:'C. Ruiz',style:'cuidadoso',rating:94}]},
+  {name:'Azur GP',color:'#1e5bc6',color2:'#ffd23f',drivers:[{name:'M. Ortega',style:'metronomo',rating:98},{name:'L. Varga',style:'defensor',rating:97}]},
+  {name:'Naranja Motorsport',color:'#ff8700',color2:'#1a1a1a',drivers:[{name:'K. Tanaka',style:'agresivo',rating:97},{name:'S. Moreau',style:'rompe',rating:96}]},
+  {name:'Turquesa Racing',color:'#00a19c',color2:'#ffffff',drivers:[{name:'J. Lindqvist',style:'cuidadoso',rating:97},{name:'R. Costa',style:'irregular',rating:95}]},
+  {name:'Violeta Team',color:'#6c3bd1',color2:'#ffffff',drivers:[{name:'A. Novak',style:'defensor',rating:95},{name:'P. Silva',style:'agresivo',rating:94}]},
+  {name:'Verde Bosque',color:'#2bb24c',color2:'#ffffff',drivers:[{name:'T. Becker',style:'metronomo',rating:95},{name:'D. Moretti',style:'irregular',rating:93}]},
+  {name:'Sol Racing',color:'#ffd23f',color2:'#1a1a1a',drivers:[{name:'H. Kim',style:'agresivo',rating:94},{name:'E. Laurent',style:'defensor',rating:92}]},
+  {name:'Acero F1',color:'#c9ced4',color2:'#e10600',drivers:[{name:'N. Ivanov',style:'rompe',rating:93},{name:'F. Duarte',style:'irregular',rating:91}]},
+  {name:'Granate Corse',color:'#8e1b3a',color2:'#f2c14e',drivers:[{name:'G. Rossi',style:'agresivo',rating:93},{name:'M. Haas',style:'cuidadoso',rating:91}]},
+  {name:'Polar Racing',color:'#e8f1ff',color2:'#0a3d91',drivers:[{name:'O. Nyström',style:'metronomo',rating:92},{name:'B. Okafor',style:'irregular',rating:91}]},
+  {name:'Coral Motorsport',color:'#ff5a6e',color2:'#14213d',drivers:[{name:'I. Petrova',style:'defensor',rating:92},{name:'L. Méndez',style:'rompe',rating:90}]}
 ];
 // equipos -> lista de participantes. El equipo del jugador siempre entra.
 function rosterFromTeams(teams,nCars,diff){
@@ -512,8 +535,8 @@ function yellowAhead(R,idx,span){const N=R.tr.N;for(const y of R.yellow){const d
 function botControl(R,c,dt){
   const tr=R.tr,N=tr.N,fx=Math.cos(c.a),fy=Math.sin(c.a),vf=c.vx*fx+c.vy*fy;
   if(c.recover>0){c.recover-=dt;if(c.recSteer===0){c.throttle=0;c.brake=0.3;c.steer=0;return;}c.throttle=0;c.brake=1;c.steer=SIMB?c.recSteer:-c.recSteer;return;}
-  const T=c.traits;let off=c.baseOff,slow=1;const yel=R.phase==='race'?yellowAhead(R,c.idx,90):0;if(yel)slow=0.85;if(c.temp>118)slow*=0.95;
-  const underSC=R.sc&&R.sc.phase!=='gone';
+  const T=c.traits,rlw=1,rlh=tr.rl?tr.rl[(c.idx+10)%N]*rlw:0;let off=rlh+c.baseOff*(tr.rl?(rlw<1?1:0.25):1),slow=1,sideBy=false; /* v46: en la primera vuelta, cada uno conserva más su lado (todos a la misma trazada = choques en la curva 1) */const yel=R.phase==='race'?yellowAhead(R,c.idx,90):0;if(yel)slow=0.85;if(c.temp>118)slow*=0.95;
+  const underSC=R.sc&&R.sc.phase!=='gone'&&!c.unlap;
   if(c.yieldTo&&!underSC){const m=R.cars.find(o=>o.id===c.yieldTo);if(m&&m.prog<c.prog&&c.prog-m.prog<24){off=m.lat>0?-(W-26):(W-26);slow*=0.9;}else if(m&&m.prog>c.prog+4){c.yieldTo=null;}}
   if(underSC&&!c.pitReq)off=0;
   // me han adelantado con amarilla o safety car y me devuelven el puesto: salgo de su estela por el otro lado y le paso
@@ -527,9 +550,9 @@ function botControl(R,c,dt){
       // adelantar: los agresivos buscan hueco antes
       if(d>0&&d<(dead?22:8+8*T.agr)&&Math.abs(o.lat-c.lat)<CARW+12&&!(c.lap<=1&&R.mode==='race'&&!dead&&T.agr<0.6&&(tr.corner[(c.idx+12)%N]||tr.corner[(c.idx+25)%N]))&&(!yel||dead||o.recover>0||Math.hypot(o.vx,o.vy)<60))off=o.lat>c.lat?o.lat-(CARW+18):o.lat+(CARW+18);
       // rueda con rueda: si está solapado a mi lado, le dejo un coche de hueco (no le cierro la puerta)
-      if(Math.abs(d)*tr.sp<2*HL+10&&Math.abs(o.lat-c.lat)<CARW+20&&!dead)off=o.lat>c.lat?Math.min(off,o.lat-(CARW+16)):Math.max(off,o.lat+(CARW+16));
+      if(Math.abs(d)*tr.sp<2*HL+10&&Math.abs(o.lat-c.lat)<CARW+20&&!dead&&(sideBy=true))off=o.lat>c.lat?Math.min(off,o.lat-(CARW+16)):Math.max(off,o.lat+(CARW+16));
       // doblados: si me alcanza alguien con una vuelta más, me aparto y aflojo
-      if(d<0&&d>-26&&o.prog-c.prog<0&&c.prog-o.prog<26&&o.lap>c.lap&&!o.dnf&&R.mode==='race'){off=o.lat>0?-(W-16):(W-16);slow=0.93;}
+      if(d<0&&d>-26&&o.prog-c.prog<0&&c.prog-o.prog<26&&o.lap>c.lap&&!o.dnf&&R.mode==='race'){c.blueT=R.t;off=o.lat>0?-(W-16):(W-16);slow=0.93;}
       // defender: tapar la línea del que viene detrás en recta
       // defender: un solo movimiento y solo si el de detrás aún no ha metido el morro
       if(d<0&&d*tr.sp<-(2*HL+14)&&d>-14&&!tr.corner[c.idx]&&o.lap===c.lap&&T.def>0.3&&Math.abs(o.lat-c.lat)>8&&!c.defended){off=c.lat+(o.lat-c.lat)*0.6*T.def;}
@@ -539,13 +562,14 @@ function botControl(R,c,dt){
   }
   // esquivar restos en la trazada
   if(R.debris&&R.debris.length)for(const d of R.debris){const di=(d.idx-c.idx+N)%N;if(di>2&&di<30&&Math.abs(d.lat-off)<16&&Math.abs(d.lat)<W+10){off=d.lat>off?d.lat-24:d.lat+24;}}
-  off=SIMB?clamp(off,-W+24,W-24):clamp(off,-W+14,W-14);
+  off=clamp(off,-W+14,W-14);
   const inC=SIMB&&(tr.corner[c.idx]||tr.corner[(c.idx+6)%N]);
-  c.offset+=(off-c.offset)*Math.min(1,(inC?0.35:1.5)*dt);
-  const la=Math.round(SIMB?8+Math.abs(vf)*0.032:7+Math.abs(vf)*0.045),ti=(c.idx+la)%N;
-  const diff=steerTo(c,tr,ti,c.offset);
+  c.offset+=((off-rlh)-c.offset)*Math.min(1,(inC?0.35:1.5)*dt); /* v46: desviación respecto a la trazada */
+  const la=Math.round(SIMB?8+Math.abs(vf)*0.032:7+Math.abs(vf)*0.045),ti=(c.idx+la)%N;if(sideBy&&tr.rl)c.offset=off-tr.rl[ti]*rlw; /* v46: rueda con rueda no sigue la trazada: mantiene su carril */
+  const tLat=clamp((tr.rl?tr.rl[ti]*rlw:0)+c.offset,-W+14,W-14);
+  const diff=steerTo(c,tr,ti,tLat);
   if(R.steerMode==='sim'){ // persecución pura
-    const px=tr.xs[ti]+tr.nx[ti]*c.offset-c.x,py=tr.ys[ti]+tr.ny[ti]*c.offset-c.y,ld=Math.max(40,Math.hypot(px,py));
+    const px=tr.xs[ti]+tr.nx[ti]*tLat-c.x,py=tr.ys[ti]+tr.ny[ti]*tLat-c.y,ld=Math.max(40,Math.hypot(px,py));
     const dd=Math.atan2(2*LWB*Math.sin(diff),ld);c.steer=clamp(dd/delMax(c,Math.abs(vf),R),-1,1);}
   if(R.t>2&&Math.abs(vf)<20&&c.fuel>0){c.stuckT+=dt;if(c.stuckT>1.2){c.stuckT=0;c.recover=1.0;c.recSteer=Math.sign(diff)||1;c.recN=(c.recN||0)+1;
     // comisarios: tras varios intentos fallidos devuelven el coche a pista (pierde tiempo)
@@ -558,11 +582,11 @@ function botControl(R,c,dt){
   // primera vuelta con la parrilla agrupada: se frena antes en las curvas y se deja más aire al de delante
   const L1=R.mode==='race'&&R.phase==='race'&&c.lap<=1&&!c.isPlayer;
   // v44: menos prudencia (antes frenaban un 6 % antes y dejaban casi el doble de hueco: las salidas eran un paseo)
-  if(L1&&vl0<VMAX*0.95)target*=0.985;
+  if(L1&&vl0<VMAX*0.95)target*=L1F;
   const agr=L1?T.agr*0.8:T.agr;
   for(const o of R.cars){
-    if(o===c||o.pit||o.dnf||o.engineDead||(rc&&o===rc&&Math.abs(o.lat-c.lat)>CARW))continue;const d=o.prog-c.prog;
-    if(d>0&&d<(L1?22:18)&&Math.abs(o.lat-c.lat)<CARW+(L1?12:8)){
+    if(o===c||o.pit||o.dnf||o.engineDead||(rc&&o===rc&&Math.abs(o.lat-c.lat)>CARW)||(R.sc&&(c.unlap||o.unlap)))continue;const d=o.prog-c.prog;
+    if(d>0&&d<(L1?22:18)&&Math.abs(o.lat-c.lat)<CARW+(L1?22:8)){
       // seguir al de delante: anticipa su frenada y guarda distancia según la velocidad
       const ov=Math.max(0,o.vx*tr.tx[o.idx]+o.vy*tr.ty[o.idx]),gap=d*tr.sp-(2*HL+(L1?9:6))-Math.abs(vf)*(L1?0.06:0.05)*(1-0.5*agr);
       const ob=o.brake>0.3?o.brake*brakeMax(o,ov)*(L1?0.32:0.25):0;
@@ -592,9 +616,10 @@ function botControl(R,c,dt){
     let ahead=null,da=1e9;for(const o of R.cars){if(o===c||o.pit||o.dnf||o.finished||(rc&&o===rc))continue;const d=o.prog-c.prog;if(d>0&&d<da){da=d;ahead=o;}}
     const scd=scProg(R)-c.prog;let fv,fd;
     if(scd>0&&scd<da&&R.sc.phase!=='gone'){fv=R.sc.v;fd=scd*tr.sp;}else if(ahead){fv=Math.max(0,ahead.vx*tr.tx[ahead.idx]+ahead.vy*tr.ty[ahead.idx]);fd=da*tr.sp;}
-    if(fv!=null){const D=85+Math.abs(vf)*0.35,ab=ahead&&ahead.brake>0.6&&fd<D*1.3&&!(scd>0&&scd<da)?ahead.brake*60:0;target=Math.min(target,fd<D*0.7?Math.max(0,fv*0.7-ab):Math.max(0,fv-ab+(fd-D)*0.6));}
+    if(fv!=null){const D=60+Math.abs(vf)*0.22,ab=ahead&&ahead.brake>0.6&&fd<D*1.3&&!(scd>0&&scd<da)?ahead.brake*60:0;target=Math.min(target,fd<D*0.7?Math.max(0,fv*0.7-ab):Math.max(0,fv-ab+(fd-D)*0.6));}
     target=Math.min(target,(SIMB?tr.vLimS:tr.vLim)[(c.idx+2)%N]*0.85);
   }
+  if(c.unlap&&R.sc)target=Math.min(target,(SIMB?tr.vLimS:tr.vLim)[(c.idx+2)%N]*0.93); /* desdoblándose: rápido pero sin arriesgar */
   if(!paved(c.surf))target=Math.min(target,SIMB?150:200);
   if(!SIMB&&Math.abs(diff)>0.6)target=Math.min(target,180);
   if(SIMB&&Math.abs(diff)>1.2)target=Math.min(target,140);
@@ -853,6 +878,7 @@ function physicsSim(R,c,dt){
 function corners(c){const fx=Math.cos(c.a),fy=Math.sin(c.a),sx=-fy,sy=fx;return [[c.x+fx*HL+sx*HW,c.y+fy*HL+sy*HW],[c.x+fx*HL-sx*HW,c.y+fy*HL-sy*HW],[c.x-fx*HL-sx*HW,c.y-fy*HL-sy*HW],[c.x-fx*HL+sx*HW,c.y-fy*HL+sy*HW]];}
 function inside(c,p){const fx=Math.cos(c.a),fy=Math.sin(c.a),dx=p[0]-c.x,dy=p[1]-c.y;return Math.abs(dx*fx+dy*fy)<=HL&&Math.abs(-dx*fy+dy*fx)<=HW;}
 function collidePair(R,a,b){
+  if(R.sc&&((a.unlap&&a.bot)||(b.unlap&&b.bot)))return; /* v46: el doblado que se desdobla con safety car no choca (va por fuera, sin riesgo) */
   const dx=b.x-a.x,dy=b.y-a.y;if(dx*dx+dy*dy>(2*HL+4)*(2*HL+4))return;
   const ia=a.pit==='service'?0:1,ib=b.pit==='service'?0:1;if(ia+ib===0)return;
   const axes=[[Math.cos(a.a),Math.sin(a.a)],[-Math.sin(a.a),Math.cos(a.a)],[Math.cos(b.a),Math.sin(b.a)],[-Math.sin(b.a),Math.cos(b.a)]];
@@ -1196,8 +1222,15 @@ function scStep(R,dt){
   for(const c of R.cars)if(c.wrecked&&!c.cleared&&R.t-sc.t0>18){c.cleared=true;c.clearAt=R.t+8;}
   sc.clear=!R.cars.some(c=>!c.pit&&!c.finished&&!c.cleared&&(c.dnf||c.engineDead||c.recover>0)&&Math.abs(c.lat)<W+60)&&!(R.debris&&R.debris.some(d=>Math.abs(d.lat)<W+KERB));
   // ¿pelotón agrupado? nadie a más de ~300 px del de delante (o se agota el tiempo)
-  {const run=R.cars.filter(c=>!c.pit&&!c.dnf&&!c.finished&&!c.engineDead).sort((a,b)=>b.prog-a.prog);let big=0;for(let k=1;k<run.length;k++)if((run[k-1].prog-run[k].prog)*tr.sp>450)big++;sc.bunched=big<=1&&(run.length<2||(run[0].prog-run[run.length-1].prog)*tr.sp<run.length*290)&&R.cars.filter(c=>c.pit&&!c.dnf&&!c.finished).length<=1;} // y nadie (o casi) en boxes // se tolera algún rezagado (coche tocado)
-  if(sc.phase==='out'&&sc.clear&&lead.lap>=sc.leadLap0+1&&R.t-sc.t0>30&&(sc.bunched||R.t-sc.t0>160)){sc.phase='in';if(R.fx)R.events.push({type:'sc_in'});}
+  {const run=R.cars.filter(c=>!c.pit&&!c.dnf&&!c.finished&&!c.engineDead).sort((a,b)=>b.prog-a.prog);let big=0;for(let k=1;k<run.length;k++)if((run[k-1].prog-run[k].prog)*tr.sp>(run[k].unlap?1e9:330))big++;sc.bunched=big===0&&(run.length<2||(run[0].prog-run[run.length-1].prog)*tr.sp<run.length*175) /* v46: todos en fila y pegados (antes valía un hueco grande y ~45 m por coche) */&&R.cars.filter(c=>c.pit&&!c.dnf&&!c.finished).length<=1;} // y nadie (o casi) en boxes // se tolera algún rezagado (coche tocado)
+  /* v46: con la pista despejada, los doblados pasan al safety car y recuperan la vuelta antes de la relanzada */
+  if(sc.phase==='out'&&sc.clear&&R.t-sc.t0>20&&R.mode==='race'){let n=0;
+    for(const c of R.cars)if(!c.unlap&&c!==lead&&!c.pit&&!c.dnf&&!c.finished&&!c.engineDead&&lead.prog-c.prog>N*0.6){c.unlap=true;n++;if(R.fx&&c.isPlayer&&!c.bot)R.events.push({type:'unlap',car:c});}
+    if(n&&R.fx&&!sc.unlapSaid){sc.unlapSaid=true;R.events.push({type:'unlap_all',n});}}
+  /* hecho cuando ya ha pasado al safety car: luego da la vuelta y se pone a la cola (como en la F1) */
+  for(const c of R.cars)if(c.unlap){const ah=((c.idx-Math.floor(sc.s))%N+N)%N;if(c.dnf||c.finished||(ah>30&&ah<N*0.5&&!c.pit))c.unlap=false;}
+  const unlapping=R.cars.some(c=>c.unlap&&!c.pit);
+  if(sc.phase==='out'&&sc.clear&&lead.lap>=sc.leadLap0+1&&R.t-sc.t0>30&&((sc.bunched&&!unlapping)||R.t-sc.t0>240)){sc.phase='in';if(R.fx)R.events.push({type:'sc_in'});}
   if(sc.phase==='gone'){if(lead.lap>sc.endLap||lead.finished){R.sc=null;if(R.fx)R.events.push({type:'sc_end'});}return;}
   const i=Math.floor(sc.s)%N,lim=SIMB?tr.vLimS[i]:tr.vLim[i];
   // espera al pelotón: si el líder está lejos, va más despacio
@@ -1362,14 +1395,14 @@ function stepRace(R,dt){
   // jugador bajo safety car: no se puede adelantar al coche de seguridad
   if(R.sc&&R.mode==='race'){const p=R.player;
     if(p&&!p.bot&&!p.pit&&!p.dnf&&!p.finished){const pen=R.sc.pens;
-      if(R.sc.phase!=='gone'&&p.prog>scProg(R)+1&&!pen.sc){pen.sc=1;p.pen+=10;if(R.fx)R.events.push({type:'sc_pen',car:p,who:'el safety car'});}}}
+      if(R.sc.phase!=='gone'&&p.prog>scProg(R)+1&&!pen.sc&&!p.unlap){pen.sc=1;p.pen+=10;if(R.fx)R.events.push({type:'sc_pen',car:p,who:'el safety car'});}}}
   // adelantar con safety car o en zona de bandera amarilla: tienes 10 s para devolver la posición (el otro piloto intenta recuperarla) o te caen 5 s
   if(R.phase==='race'&&R.mode==='race'){const p=R.player;
     if(p&&!p.bot&&!p.pit&&!p.dnf&&!p.finished){const Y=R.ypass||(R.ypass={prev:{},owe:null});const N=R.tr.N,scOn=!!R.sc;
       // no cuenta si la amarilla es por ti (te has salido / vas lento), si acabas de volver a pista, o si pasas al coche accidentado o lento
       const pv=Math.hypot(p.vx,p.vy);if(p.off||p.recover>0||(!scOn&&pv<60))Y.offT=R.t;
       const mine=R.t-(Y.offT||-99)<6;
-      const inY=scOn?!(p.off||p.recover>0):!mine&&R.yellow.some(y=>{const d=(y-p.idx+N)%N;return d<110||d>N-45;});
+      const inY=scOn?!(p.off||p.recover>0||p.unlap):!mine&&R.yellow.some(y=>{const d=(y-p.idx+N)%N;return d<110||d>N-45;});
       for(const o of cars){if(o===p||o.pit||o.dnf||o.finished)continue;const ahead=o.prog>p.prog;
         const oSlow=o.off||o.recover>0||o.engineDead||o.ooc>R.t||(!scOn&&Math.hypot(o.vx,o.vy)<0.6*Math.max(80,pv));
         if(Math.abs(o.prog-p.prog)<2)continue; // rueda con rueda: aún no hay adelantamiento
