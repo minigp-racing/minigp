@@ -1,0 +1,16 @@
+# Copias de versiones anteriores y paquetes (no se publican)
+MiniGP_v*.html
+MiniGP_web.zip
+backup_v43_src/
+
+# Notas de trabajo privadas (se quedan solo en este ordenador)
+CLAUDE.md
+
+# Capturas que generan las pruebas de Playwright
+out_*.png
+tests/out_*.png
+
+# Varios del sistema
+Thumbs.db
+desktop.ini
+.DS_Store
