@@ -3,7 +3,7 @@ const VMAX=600, ACC=440, BRAKE=540, REV_ACC=260, REV_MAX=120;
 const STEER=3.4, STEER_LOSS=0.42, A_LAT=1250, K_LAT=16;
 const W=60, RUNOFF=230, SP=10, KMH=0.55;
 const HL=19, HW=7.5, INERTIA=(4*HL*HL+4*HW*HW)/12, CARW=2*HW; // coche a escala real: 5,6 m × 2 m (6,5 px/m)
-const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=1.1; // fracción de la frenada máxima que usan los bots
+const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=1.1,BOTAERO=0.75,BOTLIVE=0.9,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6; // fracción de la frenada máxima que usan los bots
 const PIT_LAT=W+65, PIT_BOX=W+99, PIT_V=150, PIT_HALF=26, BOT_BRAKE=BRAKE*0.66;
 // modos de motor: ahorro / normal / ataque
 const EMODES=[{n:'Ahorro',p:0.965,heat:0.55,fuel:0.88,wear:0.5},{n:'Normal',p:1,heat:1,fuel:1,wear:1},{n:'Ataque',p:1.035,heat:1.5,fuel:1.12,wear:2.2}];
@@ -30,7 +30,7 @@ function delMax(c,v,R){
     // el volante no se “encoge” tanto con neumáticos fríos, gastados o en mojado: el coche desliza, pero gira
     const tg=Math.max(0.3,tyreGrip(c)),gl=gripLat(c,v,R)/tg*(0.55+0.45*tg);
     return Math.min(0.36+0.14*lo+(beta>0.1?0.12:0),Math.max(0.02,LWB*gl*k/Math.max(1,v*v)));}
-  const k=2.0-0.8*Math.min(1,v/VMAX); // jugador: el tope del volante es el límite de agarre (girar sin gas no derrapa) // dirección progresiva: a alta velocidad el tope de giro queda cerca del límite de agarre
+  const rv=Math.min(1,v/VMAX),k=BOTSTK-BOTSTV*rv+BOTSTQ*rv*rv*rv; /* v46: los bots llegaban al tope del volante con agarre de sobra en curvas rápidas (Spa, Montmeló) y se abrían */ // jugador: el tope del volante es el límite de agarre (girar sin gas no derrapa) // dirección progresiva: a alta velocidad el tope de giro queda cerca del límite de agarre
   return Math.min(0.32,Math.max(0.02,LWB*gripLat(c,v,R)*k/Math.max(1,v*v)));}
 const COMPOUNDS={
   S:{name:'Blando',grip:1.07,wear:1.75,color:'#e53935',win:[78,105],heat:1.15},
@@ -151,10 +151,11 @@ function buildTrack(ti){
    for(let i=0;i<N;i++){RX[i]=Px(i);RY[i]=Py(i);}}
   const angR=new Float64Array(N),segR=new Float64Array(N);
   for(let i=0;i<N;i++){const p=(i-1+N)%N,q=(i+1)%N;angR[i]=Math.atan2(RY[q]-RY[p],RX[q]-RX[p]);segR[i]=Math.hypot(RX[q]-RX[i],RY[q]-RY[i]);}
-  const vLimS=new Float64Array(N);{const cc=0.9*G*AERO/(VMAX*VMAX);const vS=new Float64Array(N);
+  const vLimS=new Float64Array(N);{const cc=BOTAERO*G*AERO/(VMAX*VMAX);const vS=new Float64Array(N);
     const kw=new Float64Array(N),kR=new Float64Array(N);for(let i=0;i<N;i++){const a=(i-9+N)%N,b=(i+9)%N,a4=(i-4+N)%N,b4=(i+4)%N;
       kw[i]=Math.abs(angNorm(angR[b]-angR[a]))/Math.max(1,Math.hypot(RX[b]-RX[a],RY[b]-RY[a])); // curvatura media de la trazada (filtra ruido GPS)
       kR[i]=Math.abs(angNorm(angR[b4]-angR[a4]))/Math.max(1,Math.hypot(RX[b4]-RX[a4],RY[b4]-RY[a4]));}
+    var kRS=Float32Array.from(kw,(x,i)=>Math.max(x,kR[i]*0.8));
     for(let i=0;i<N;i++){const ak=Math.max(kw[i],kR[i]*0.6);vS[i]=ak<=cc?VMAX*1.05:Math.min(VMAX*1.05,Math.sqrt(BOTCRN*G*MECH/(ak-cc)));}
     for(let i=0;i<N;i++){let m=1e9;for(let d=-4;d<=4;d++)m=Math.min(m,vS[(i+d+N)%N]);vLimS[i]=m;}
     var vCornS=Float32Array.from(vLimS); // velocidad de paso por curva, sin la frenada (para la frenada tardía de los bots)
@@ -168,7 +169,7 @@ function buildTrack(ti){
    for(let q=0;q<N;q++){const i=(q0+q)%N;if(corner[i]&&!corner[(i-1+N)%N]){
      let e=i,sgn=0,km=0;while(corner[e%N]&&e-i<N){const kk=k[e%N];if(Math.abs(kk)>km){km=Math.abs(kk);sgn=-Math.sign(kk);}e++;}
      const type=R2()<0.65?2:1;for(let j=i-6;j<e+(type===2?22:10);j++){const jj=((j%N)+N)%N;outSide[jj]=sgn;outSurf[jj]=type;}}}}
-  const tr={rl,vCorn:(typeof vCornS!=="undefined"?vCornS:null),vWet:(typeof vWetS!=="undefined"?vWetS:null),name:def.name,country:def.country,ti,N,sp,len,xs,ys,tx,ty,nx,ny,ang,k,vLim,vLimS,corner,outSide,outSurf};
+  const tr={rl,kR:(typeof kRS!=="undefined"?kRS:null),vCorn:(typeof vCornS!=="undefined"?vCornS:null),vWet:(typeof vWetS!=="undefined"?vWetS:null),name:def.name,country:def.country,ti,N,sp,len,xs,ys,tx,ty,nx,ny,ang,k,vLim,vLimS,corner,outSide,outSurf};
   // charcos: mismos que dibuja el juego (misma semilla); se llenan cuando hay mucha agua en ese punto
   {const Rp=rng(ti*97+3),pud=[];for(let q=0;q<Math.round(N/12);q++){const i=Math.floor(Rp()*N),lat=(Rp()-0.5)*2*(W-18);const rx=14+Rp()*26,ry=8+Rp()*12;Rp();pud.push({i,lat,rx,ry,th:0.45+Rp()*0.4});}
    tr.pud=pud;tr.pudIdx=new Map();for(const p of pud){const n=Math.ceil(p.rx/sp)+1;for(let d=-n;d<=n;d++){const j=((p.i+d)%N+N)%N;if(!tr.pudIdx.has(j))tr.pudIdx.set(j,[]);tr.pudIdx.get(j).push(p);}}}
@@ -347,7 +348,7 @@ function rosterFromTeams(teams,nCars,diff){
   if(pt>=0&&!use.includes(pt))use[nT-1]=pt;
   const r=[];
   use.forEach((ti,k)=>{const t=teams[ti];t.drivers.slice(0,2).forEach((d,j)=>{
-    r.push({name:d.name||('Piloto '+(r.length+1)),color:t.color,color2:t.color2,teamName:t.name,teamIdx:ti,isPlayer:!!d.player,
+    r.push({name:d.name||('Piloto '+(r.length+1)),color:t.color,color2:t.color2,livery:t.livery!=null?t.livery:(ti*3+1)%7,teamName:t.name,teamIdx:ti,isPlayer:!!d.player,
       skill:d.player?1:lo+(hi-lo)*clamp(d.rating,0,100)/100+(Math.random()-0.5)*0.008,team:k,slot:k*2+j,id:ti+':'+j,car:t.car||null,
       tr:driverTraits(d)});
   });});
@@ -358,7 +359,7 @@ function makeRoster(diff){return rosterFromTeams(DEFAULT_TEAMS,8,diff);}
 function makeCar(tr,e,idx,lat,compound,fuel,autopilot){
   const cf=e.car?{pwr:0.9+0.16*e.car.eng,aero:0.84+0.26*e.car.aero,mech:0.92+0.13*e.car.chas,rel:e.car.rel}:{pwr:1,aero:1,mech:1,rel:0.6}; // más diferencia entre coches buenos y malos
   return {cf,traits:e.tr||{agr:0.5,def:0.5,reg:0.5,bru:0.3},temp:90,tt:80,r:0,latG:0,lonG:0,brakeS:0.5,gearS:0.5,tcS:0.6,kers:4,kersOn:false,drsOpen:false,drsOk:false,slip:0,pen:0,warns:0,offT:0,pace:1,
-    name:e.name,color:e.color,color2:e.color2||'#ffffff',teamName:e.teamName||'',id:e.id,isPlayer:e.isPlayer,skill:e.skill,team:e.team,slot:e.slot==null?e.team:e.slot,bot:!e.isPlayer||!!autopilot,yaw:0,
+    name:e.name,color:e.color,color2:e.color2||'#ffffff',livery:e.livery||0,teamName:e.teamName||'',id:e.id,isPlayer:e.isPlayer,skill:e.skill,team:e.team,slot:e.slot==null?e.team:e.slot,bot:!e.isPlayer||!!autopilot,yaw:0,
     x:tr.xs[idx]+tr.nx[idx]*lat,y:tr.ys[idx]+tr.ny[idx]*lat,a:tr.ang[idx],vx:0,vy:0,av:0,idx,lat,
     steer:0,throttle:0,brake:0,surf:'asphalt',skid:0,
     compound,nextCompound:compound,wear:0,fuel,fuelAtLap:fuel,wearAtLap:0,fuelPerLap:null,wearPerLap:null,
@@ -548,7 +549,7 @@ function botControl(R,c,dt){
       if(o===c||o.pit)continue;const d=o.prog-c.prog,dead=o.dnf||o.engineDead;
       if(underSC)break;
       // adelantar: los agresivos buscan hueco antes
-      if(d>0&&d<(dead?22:8+8*T.agr)&&Math.abs(o.lat-c.lat)<CARW+12&&!(c.lap<=1&&R.mode==='race'&&!dead&&T.agr<0.6&&(tr.corner[(c.idx+12)%N]||tr.corner[(c.idx+25)%N]))&&(!yel||dead||o.recover>0||Math.hypot(o.vx,o.vy)<60))off=o.lat>c.lat?o.lat-(CARW+18):o.lat+(CARW+18);
+      if(d>0&&d<(dead?22:8+8*T.agr)&&Math.abs(o.lat-c.lat)<CARW+12&&!(c.lap<=1&&R.mode==='race'&&!dead&&T.agr<L1A&&(tr.corner[(c.idx+12)%N]||tr.corner[(c.idx+25)%N]))&&(!yel||dead||o.recover>0||Math.hypot(o.vx,o.vy)<60))off=o.lat>c.lat?o.lat-(CARW+18):o.lat+(CARW+18);
       // rueda con rueda: si está solapado a mi lado, le dejo un coche de hueco (no le cierro la puerta)
       if(Math.abs(d)*tr.sp<2*HL+10&&Math.abs(o.lat-c.lat)<CARW+20&&!dead&&(sideBy=true))off=o.lat>c.lat?Math.min(off,o.lat-(CARW+16)):Math.max(off,o.lat+(CARW+16));
       // doblados: si me alcanza alguien con una vuelta más, me aparto y aflojo
@@ -588,7 +589,7 @@ function botControl(R,c,dt){
   const agr=L1?T.agr*0.8:T.agr;
   for(const o of R.cars){
     if(o===c||o.pit||o.dnf||o.engineDead||(rc&&o===rc&&Math.abs(o.lat-c.lat)>CARW)||(R.sc&&(c.unlap||o.unlap)))continue;const d=o.prog-c.prog;
-    if(d>0&&d<(L1?22:18)&&Math.abs(o.lat-c.lat)<CARW+(L1?22:8)){
+    if(d>0&&d<(L1?22:18)&&Math.abs(o.lat-c.lat)<CARW+(L1?L1W:8)){
       // seguir al de delante: anticipa su frenada y guarda distancia según la velocidad
       const ov=Math.max(0,o.vx*tr.tx[o.idx]+o.vy*tr.ty[o.idx]),gap=d*tr.sp-(2*HL+(L1?9:6))-Math.abs(vf)*(L1?0.06:0.05)*(1-0.5*agr);
       const ob=o.brake>0.3?o.brake*brakeMax(o,ov)*(L1?0.32:0.25):0;
@@ -613,6 +614,8 @@ function botControl(R,c,dt){
     if(side&&T.agr>0.6&&brakeZ&&(side.lat-c.lat)*tr.k[(c.idx+15)%N]<0)target*=1.04; // por dentro de la curva que viene: frena más tarde
     c.inBrake=brakeZ;
   }
+  /* v46: comprobación en directo con el agarre real del coche (gomas gastadas, gasolina, alerón): la tabla daba algunas curvas rápidas «a fondo» y se abrían */
+  if(SIMB&&tr.kR&&!underSC){const gl=gripLat(c,Math.max(150,Math.abs(vf)),R)*BOTLIVE,dec=BOTDEC*G*2.7*0.85;let vb=1e9;for(let k=2;k<64;k+=3){const kk=tr.kR[(c.idx+k)%N];if(kk<2e-5)continue;const vc=Math.sqrt(gl/kk);vb=Math.min(vb,Math.sqrt(vc*vc+2*dec*k*tr.sp));}target=Math.min(target,vb*c.skill*c.pace);}
   if(SIMB){const kk=Math.max(Math.abs(tr.k[(c.idx+4)%N]),Math.abs(tr.k[(c.idx+10)%N]));target*=Math.sqrt(Math.max(0.55,1-kk*Math.abs(c.offset)*1.2));}
   if(underSC){ // en fila detrás del coche de seguridad / del de delante, sin adelantar
     let ahead=null,da=1e9;for(const o of R.cars){if(o===c||o.pit||o.dnf||o.finished||(rc&&o===rc))continue;const d=o.prog-c.prog;if(d>0&&d<da){da=d;ahead=o;}}
@@ -859,7 +862,9 @@ function physicsSim(R,c,dt){
   if(c.launchSpin&&R.t<c.launchSpin&&thr>0.5)c.skid=Math.max(c.skid,0.85);
   // v44: lo que se ve y se oye (marcas, humo, chirrido) solo cuando el neumático pasa de verdad de su límite (~9°),
   // no al trabajar normal en curva; c.skid sigue igual para el calor y el desgaste
-  c.skidV=clamp(Math.max((slide-0.155)/0.12,lock?0.7:0,(c.spinW||0)>0.25&&v>15?0.4+c.spinW*0.6:0,c.lockVis>R.t&&braking&&v>60?0.8:0),0,1);
+  /* v46: y que deslice de verdad: a poca velocidad el ángulo sale grande sin que la goma arrastre (girando despacio se marcaba el asfalto) */
+  const slV=v*Math.sin(Math.min(1.2,slide));
+  c.skidV=clamp(Math.max(slV>34?Math.min((slide-0.155)/0.12,(slV-34)/30):0,lock&&v>70?0.7:0,(c.spinW||0)>0.3&&v>40?0.4+c.spinW*0.6:0,c.lockVis>R.t&&braking&&v>60?0.8:0),0,1);
   if(c.launchSpin&&R.t<c.launchSpin&&thr>0.5)c.skidV=Math.max(c.skidV,0.85);
   c.latG=Math.abs(vf*c.r)/G;c.lonG=ax/G;
   {const ay=clamp(vf*c.r/G,-5,5);c.roll=(c.roll||0)+(ay-(c.roll||0))*Math.min(1,dt/0.17);c.rollLag=Math.abs(ay-c.roll);} // balanceo (en G), con ~0,17 s de retraso
