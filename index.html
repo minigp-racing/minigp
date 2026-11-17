@@ -259,14 +259,32 @@ body.compact.portrait #radio{top:auto;bottom:calc(330px*var(--u));max-width:calc
 #pause .card{position:relative}
 #pause #resume{position:sticky;bottom:-22px;z-index:2;box-shadow:0 -10px 18px rgba(10,24,56,.95)}
 /* v45: en el móvil la tabla de posiciones sobra (la posición está arriba) */
-.compact #board{display:none!important}
-.compact #topbar{left:8px;transform:none}
+/* v48: en el móvil la caja de arriba es una mini clasificación (el #board con towerHtml) y la barra de números grandes se oculta */
+.compact #topbar{display:none!important}
+.compact #board,.portrait #board,.land #board{top:6px;left:6px;width:auto;min-width:calc(128px*var(--u));max-width:42vw;padding:calc(4px*var(--u)) calc(6px*var(--u));font-size:calc(11px*var(--u));background:rgba(8,14,30,.66);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.twh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:.92em;opacity:.9;text-transform:uppercase;letter-spacing:.04em;padding-bottom:2px;margin-bottom:2px;border-bottom:1px solid rgba(255,255,255,.12)}
+.twh b{font-weight:800;letter-spacing:0}.twp{font-weight:900;font-size:1.25em;letter-spacing:0;color:#fff}.twp small{font-size:.65em;opacity:.6;font-weight:700}
+.twr{display:flex;align-items:center;gap:5px;line-height:1.45;font-variant-numeric:tabular-nums;white-space:nowrap}
+.twr .n{width:1.4em;text-align:right;opacity:.75;font-weight:700}.twr i{width:3px;height:.95em;border-radius:1px;flex:none}
+.twr .a{font-weight:700;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis}.twr .g{margin-left:auto;padding-left:6px;opacity:.75;font-family:ui-monospace,Menlo,monospace;font-size:.92em}
+.twr.me{background:rgba(31,111,255,.5);border-radius:3px;margin:0 -3px;padding:0 3px}.twr.me .g{opacity:1}.twr.out{opacity:.4}.twr.cut{border-top:1.5px solid #ff5a5a}
+.twgap{height:1px;margin:2px 0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.35) 0 2px,transparent 2px 5px)}
+.twl{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,.12);font:800 1em ui-monospace,Menlo,monospace}
+.twl .twd{font-size:.9em;border-radius:3px;padding:0 3px}
 /* v45: panel del garaje (clasificación en directo) */
-#garage{position:absolute;left:50%;top:34%;transform:translate(-50%,-50%);pointer-events:auto;display:none;min-width:320px;max-width:92vw;text-align:center;padding:10px 14px}
+#garage{position:fixed;inset:0;pointer-events:auto;display:none;z-index:30;background:radial-gradient(ellipse at 50% 45%,rgba(8,18,42,.7),rgba(2,6,16,.93));backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);animation:gIn .25s ease-out}
+@keyframes gIn{from{opacity:0}to{opacity:1}}
+#garage .gcard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(860px,94vw);max-height:94vh;overflow:auto;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:22px;align-items:center;text-align:center}
+#garage .gq{background:rgba(255,255,255,.05);border:1px solid rgba(143,208,255,.15);border-radius:10px;padding:8px 10px;text-align:left;font-size:13px}
+#garage .gqh{font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+#garage .gh{font-size:22px}
+.ingarage .tb:not([data-k=pause]){visibility:hidden}.ingarage .tb[data-k=pause]{z-index:31}
+@media (max-width:560px){#garage .gcard{grid-template-columns:1fr}}
 #garage .gh{font-size:16px;font-weight:800;margin-bottom:3px}#garage .gs{font-size:12.5px;opacity:.9;margin-bottom:8px}
 #garage .gt{display:flex;gap:5px;margin-bottom:8px}#garage .gt .btn2{padding:6px 4px;font-size:12.5px;border-width:2px}#garage .gt .btn2.sel{background:#fff;color:#0a1838;font-weight:800}
 #garage .gb{display:flex;gap:8px}#garage .gb .go{margin:0;flex:2;padding:9px}#garage .gb .btn2{flex:1}
-.compact #garage{top:30%;min-width:0;width:min(440px,70vw);padding:calc(6px*var(--u)) calc(10px*var(--u))}.compact #garage .gh{font-size:calc(13px*var(--u))}.compact #garage .gs{font-size:calc(10.5px*var(--u))}
+.compact #garage .gcard{gap:calc(14px*var(--u));width:min(760px,88vw)}.compact #garage .gh{font-size:calc(17px*var(--u))}.compact #garage .gs{font-size:calc(11px*var(--u))}.compact #garage .gq{font-size:calc(11.5px*var(--u));padding:calc(5px*var(--u)) calc(8px*var(--u))}
+.compact #garage .gt .btn2{font-size:calc(11.5px*var(--u))}.compact #garage .gb .go,.compact #garage .gb .btn2{font-size:calc(13px*var(--u));padding:calc(8px*var(--u))}
 </style>
 </head>
 <body>
@@ -2957,21 +2975,25 @@ function openPitMenu(){
 // v45: panel del garaje en la clasificación en directo: tiempo que queda, tu posición, neumático, salir y acelerar el reloj
 function garageUpdate(){
   let el=$('garage');const p=R&&R.player,L=R&&R.liveQ,show=!!(L&&p&&p.pit==='service'&&!L.end&&!ui.resultsShown&&!ui.qSkip);
-  if(!el){el=document.createElement('div');el.id='garage';el.className='panel';$('hud').appendChild(el);
+  if(!el){el=document.createElement('div');el.id='garage';$('hud').appendChild(el);
     el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!R||!R.liveQ)return;const p=R.player;
       if(b.dataset.gc){ui.gComp=b.dataset.gc;p.nextCompound=ui.gComp;}
       else if(b.id==='gOut'){if(R.liveQ.flag)return;p.nextCompound=ui.gComp||p.nextCompound;p.pitT=0.05;ui.qFast=0;}
       else if(b.id==='gFast'){ui.qFast=((ui.qFast||0)+1)%3;}
       garageUpdate(true);});}
-  el.style.display=show?'block':'none';if(!show)return;
+  el.style.display=show?'block':'none';document.body.classList.toggle('ingarage',show);if(!show)return;
   const ql=qualiList(),pos=ql.findIndex(x=>x.e.isPlayer)+1,n=ql.length,cut=EV&&EV.qfmt&&EV.qs<2?n-qCut():n,rem=Math.max(0,L.T-L.t);
   const zone=!p.bestLap?'<b style="color:#ffb36b">aún sin tiempo</b>':pos>cut?'<b style="color:#ff6b6b">zona de eliminación</b>':pos?'<b style="color:#5ef28f">pasarías</b>':'';
   const w=R.meanWet||0,wtxt=w>0.6?'🌧 pista muy mojada':w>0.15?'🌦 pista húmeda':'☀ pista seca';
   const tc=k=>'<button class="btn2'+((ui.gComp||p.nextCompound)===k?' sel':'')+'" data-gc="'+k+'" style="border-color:'+COMPOUNDS[k].color+'">'+COMPOUNDS[k].name+'</button>';
-  el.innerHTML='<div class="gh">🔧 En el garaje · '+(L.flag?'sesión terminada':'quedan <b>'+Math.floor(rem/60)+':'+String(Math.floor(rem%60)).padStart(2,'0')+'</b>')+'</div>'
+  /* v48: pantalla completa oscurecida; a la derecha, los tiempos de la sesión con la línea de corte */
+  const qrows=ql.map((x,i)=>[x,i]).filter(([x,i])=>i<8||x.e.isPlayer||i===cut-1||i===cut).slice(0,11);let lastI=-1;
+  const tbl='<div class="gq"><div class="gqh">Tiempos</div>'+qrows.map(([x,i])=>{const sep=lastI>=0&&i>lastI+1?'<div class="twgap"></div>':'';lastI=i;
+    return sep+'<div class="twr'+(x.e.isPlayer?' me':'')+(i===cut&&cut<n?' cut':'')+'"><span class="n">'+(i+1)+'</span><i style="background:'+x.e.color+'"></i><span class="a">'+esc(x.e.isPlayer?'Tú':x.e.name)+'</span><span class="g">'+(isFinite(x.t)?fmt(x.t):'—')+'</span></div>';}).join('')+'</div>';
+  el.innerHTML='<div class="gcard"><div class="gctl"><div class="gh">🔧 En el garaje · '+(L.flag?'sesión terminada':'quedan <b>'+Math.floor(rem/60)+':'+String(Math.floor(rem%60)).padStart(2,'0')+'</b>')+'</div>'
     +'<div class="gs">'+(p.bestLap?'P'+pos+' de '+n+' ':n+' coches ')+(p.bestLap?'· '+fmt(p.bestLap)+' ':'· sin tiempo ')+(EV&&EV.qfmt&&EV.qs<2?'· '+zone:'')+' · '+wtxt+'</div>'
     +'<div class="gt">'+['S','M','H','I','W'].map(tc).join('')+'</div>'
-    +'<div class="gb"><button class="go" id="gOut"'+(L.flag?' disabled':'')+'>▶ Salir a pista</button><button class="btn2" id="gFast">'+(['⏩ Tiempo ×4','⏩⏩ ×8','⏸ Tiempo normal'][ui.qFast||0])+'</button></div>';
+    +'<div class="gb"><button class="go" id="gOut"'+(L.flag?' disabled':'')+'>▶ Salir a pista</button><button class="btn2" id="gFast">'+(['⏩ Tiempo ×4','⏩⏩ ×8','⏸ Tiempo normal'][ui.qFast||0])+'</button></div></div>'+tbl+'</div>';
 }
 function requestBox(){
   if(R&&R.liveQ&&!paused&&!attract){const p=R.player;if(p.pit||p.dnf)return;p.pitReq=!p.pitReq;flash(p.pitReq?'Vuelves al garaje':'Sigues en pista',p.pitReq?'Entras en boxes al pasar por meta':'',1.3);return;}
@@ -4261,6 +4283,56 @@ function drawStatusDial(cx,cy,r){
   if(W_.length){ctx.fillStyle=W_[0][0]>=0.45?'#ff5a4f':'#ffb300';ctx.font=`900 ${F(0.115)}px system-ui,sans-serif`;ctx.fillText('⚠ '+W_[0][1]+(W_.length>1?' +'+(W_.length-1):''),cx,cy-r*0.62);}
   else if(p.dirty>0.35){ctx.fillStyle='#ffb36b';ctx.font=`700 ${Math.round(r*0.1)}px system-ui,sans-serif`;ctx.fillText('AIRE SUCIO',cx,cy-r*0.62);}
   glass(cx,cy,r);}
+/* v48: en el móvil, el estado del coche va en una tarjeta apaisada (la esfera redonda quedaba apretada y con números enormes).
+   Arriba: modo motor (antes tenía su propia esfera), temperatura y vida del motor. Centro: coche con las 4 ruedas (temperatura y vida).
+   Abajo: neumático, gasolina y barra de depósito. Los avisos sustituyen a la fila de arriba. */
+function statusWarn(p){return [[p.wheelOff!=null?1.1:0,'SIN RUEDA'],[p.bT>950?0.5+Math.min(0.5,(p.bT-950)/300):0,'FRENOS CALIENTES'],[p.bT<150&&R.phase==='race'?0.2:0,'FRENOS FRÍOS'],[(p.bW||0)>0.6?(p.bW-0.4):0,'FRENOS GASTADOS'],[(p.grain||0)>0.3?0.15+p.grain*0.3:0,'GRAINING'],[p.dWing,'ALERÓN'],[p.dRear,'TRASERA'],[p.dSusp,'SUSPENSIÓN'],[p.punct&&p.wheelOff==null?1:0,'PINCHAZO'],[p.engineDead?1:p.issue?0.6:0,'MOTOR']].filter(x=>(x[0]||0)>=0.12).sort((a,b)=>b[0]-a[0]);}
+function rrect(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);}
+function drawStatusCard(cx,cy,w,h){
+  const p=R.player,C=COMPOUNDS[p.compound],TT=p.tt||80,x0=cx-w/2,y0=cy-h/2,F=k=>Math.max(Math.round(7.5*UI_U),Math.round(h*k));
+  // fondo de cristal oscuro
+  const bg=ctx.createLinearGradient(0,y0,0,y0+h);bg.addColorStop(0,'rgba(24,30,40,.88)');bg.addColorStop(1,'rgba(8,10,14,.9)');
+  ctx.save();ctx.shadowColor='rgba(0,0,0,.45)';ctx.shadowBlur=10;ctx.fillStyle=bg;rrect(x0,y0,w,h,h*0.16);ctx.fill();ctx.restore();
+  ctx.strokeStyle='rgba(255,255,255,.16)';ctx.lineWidth=1;rrect(x0+0.5,y0+0.5,w-1,h-1,h*0.16);ctx.stroke();
+  ctx.textBaseline='middle';
+  // fila de arriba: modo motor · temperatura y vida del motor (o el aviso más grave)
+  const ty=y0+h*0.13,em=p.emode==null?1:p.emode,cols=['#3ddc84','#8fd0ff','#ff8a3d'],e=Math.round((p.eng==null?1:p.eng)*100),W_=statusWarn(p);
+  if(W_.length){const red=W_[0][0]>=0.45,on=!red||(performance.now()%700)<450;ctx.fillStyle=red?(on?'rgba(255,59,48,.85)':'rgba(255,59,48,.35)'):'rgba(255,179,0,.8)';rrect(x0+w*0.05,ty-h*0.085,w*0.9,h*0.17,h*0.085);ctx.fill();
+    ctx.fillStyle='#120606';ctx.font='900 '+F(0.105)+'px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText('⚠ '+W_[0][1]+(W_.length>1?' +'+(W_.length-1):''),cx,ty+0.5);}
+  else{const mt=EMODES[em].n.toUpperCase();ctx.font='900 '+F(0.095)+'px system-ui,sans-serif';const mw=ctx.measureText(mt).width+h*0.12;
+    ctx.fillStyle=cols[em]+'33';rrect(x0+w*0.05,ty-h*0.075,mw,h*0.15,h*0.075);ctx.fill();ctx.strokeStyle=cols[em];ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle=cols[em];ctx.textAlign='left';ctx.fillText(mt,x0+w*0.05+h*0.06,ty+0.5);
+    ctx.textAlign='right';ctx.font='700 '+F(0.09)+'px ui-monospace,Menlo,monospace';ctx.fillStyle=p.temp>127?'#ff3b30':p.temp>118?'#ffb300':'rgba(255,255,255,.7)';
+    ctx.fillText('MOTOR '+Math.round(p.temp)+'° · '+e+'%',x0+w*0.95,ty+0.5);
+    if(p.dirty>0.35){ctx.fillStyle='#ffb36b';ctx.font='700 '+F(0.075)+'px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText('AIRE SUCIO',cx,y0+h*0.25);}}
+  // coche (morro arriba) con daños por pieza y ruedas por temperatura
+  const ccy=cy+h*0.02,L=h*0.5,Wd=L*DH/DW;ctx.save();ctx.translate(cx,ccy);ctx.rotate(-Math.PI/2);
+  ctx.globalAlpha=0.9;ctx.drawImage(greyCar(p),-L/2,-Wd/2,L,Wd);ctx.globalAlpha=1;
+  const blinkOn=(performance.now()%700)<420,stc=v=>v<0.12?'rgba(61,220,132,.55)':v<0.45?'rgba(255,179,0,.9)':(blinkOn?'rgba(255,59,48,.95)':'rgba(255,59,48,.45)');
+  const part=(x,y,w2,h2,v)=>{ctx.fillStyle=stc(v);rrect(x,y,w2,h2,Math.min(w2,h2)*0.3);ctx.fill();};
+  const engV=p.engineDead?1:p.issue?0.6:clamp(1-(p.eng==null?1:p.eng)*1.15,0,1)*0.9;
+  part(L*0.41,-Wd*0.47,L*0.08,Wd*0.94,p.dWing||0);part(-L*0.5,-Wd*0.34,L*0.08,Wd*0.68,p.dRear||0);
+  part(-L*0.06,-Wd*0.5,L*0.26,Wd*0.13,(p.suspSide||1)<0?p.dSusp||0:(p.dSusp||0)*0.3);part(-L*0.06,Wd*0.37,L*0.26,Wd*0.13,(p.suspSide||1)>0?p.dSusp||0:(p.dSusp||0)*0.3);
+  ctx.fillStyle=stc(engV);ctx.beginPath();ctx.arc(-L*0.2,0,Wd*0.17,0,Math.PI*2);ctx.fill();
+  const tc=T=>p.punct?'#ff3b30':T<C.win[0]-10?'#3d7bff':T<C.win[0]?'#5ec8ff':T<=C.win[1]?'#3ddc84':T<=C.win[1]+10?'#ffb300':'#ff3b30';
+  const TS=p.tts||[TT,TT,TT,TT],WS=p.tws||[p.wear,p.wear,p.wear,p.wear],kk=L/DW;
+  [[13.4,-5.5,4.9,2.1,0],[13.4,5.5,4.9,2.1,1],[-11,-5.4,4.9,2.75,2],[-11,5.4,4.9,2.75,3]].forEach(([x,y,w2,h2,i])=>{ctx.fillStyle=tc(TS[i]);ctx.fillRect((x-w2/2)*kk,(y-h2/2)*kk,w2*kk,h2*kk);});
+  ctx.restore();
+  // cifras de cada rueda junto a ella: temperatura (color) y vida
+  const fy=ccy-13.4*kk,ry=ccy+11*kk,dx=Math.max(Wd*0.8,w*0.17);
+  [[0,-1,fy],[1,1,fy],[2,-1,ry],[3,1,ry]].forEach(([i,sx,Y])=>{const X=cx+sx*dx;ctx.textAlign=sx<0?'right':'left';
+    ctx.fillStyle=tc(TS[i]);ctx.font='800 '+F(0.12)+'px ui-monospace,Menlo,monospace';ctx.fillText(Math.round(TS[i])+'°',X,Y-h*0.045);
+    const lf=Math.round((1-WS[i])*100);ctx.fillStyle=lf<30?'#ff8a80':'rgba(255,255,255,.62)';ctx.font='700 '+F(0.08)+'px ui-monospace,Menlo,monospace';ctx.fillText(lf+'%',X,Y+h*0.05);});
+  // fila de abajo: neumático · gasolina, y barra del depósito
+  const by=y0+h*0.83;ctx.font='800 '+F(0.09)+'px system-ui,sans-serif';ctx.textAlign='left';
+  ctx.fillStyle=C.color;ctx.beginPath();ctx.arc(x0+w*0.08,by,h*0.035,0,Math.PI*2);ctx.fill();
+  ctx.fillText(C.name.toUpperCase()+' '+Math.round((1-p.wear)*100)+'%',x0+w*0.08+h*0.06,by+0.5);
+  const fpl=fplOf(R,p);ctx.textAlign='right';ctx.fillStyle='#8fd0ff';ctx.font='700 '+F(0.085)+'px ui-monospace,Menlo,monospace';
+  ctx.fillText(Math.round(p.fuel)+' L'+(R.mode==='race'?' · '+(p.fuel/fpl).toFixed(1)+' v':''),x0+w*0.95,by+0.5);
+  const fu=clamp(p.fuel/TANK,0,1),bx=x0+w*0.06,bw=w*0.88,bh=Math.max(2,h*0.028),byy=y0+h*0.93;
+  ctx.fillStyle='rgba(255,255,255,.1)';rrect(bx,byy,bw,bh,bh/2);ctx.fill();
+  if(fu>0.005){ctx.fillStyle='#42a5f5';rrect(bx,byy,bw*fu,bh,bh/2);ctx.fill();}
+}
 // esfera pequeña del mapa motor: ahorro / normal / ataque y vida del motor
 function drawModeDial(cx,cy,r){const p=R.player,em=p.emode==null?1:p.emode,cols=['#3ddc84','#8fd0ff','#ff8a3d'],e=Math.round((p.eng==null?1:p.eng)*100);
   const bz=ctx.createLinearGradient(cx-r,cy-r,cx+r,cy+r);bz.addColorStop(0,'#9aa3ad');bz.addColorStop(0.45,'#2b3037');bz.addColorStop(1,'#7c858f');
@@ -4275,9 +4347,9 @@ function drawGauges(){
   // móvil: fila completa de esferas (mapa motor · estado del coche · velocidad · vueltas), lo más grande que quepa entre los botones
   let r=70,rs=70,rm=39,cy,cx1,cx2,cxs,cxm;
   // v45: en el móvil solo 3 esferas y más pequeñas (motor · estado · velocidad con la marcha dentro): las revoluciones van en las luces de cambio
-  if(COMPACT){const side=PORTRAIT?10:(touch?12+158*UI_U:12),avail=VW-2*side-32;r=Math.min(38*UI_U,avail/6.2);rs=r*1.12;rm=r*0.58;
-    const big=ui.statBigT&&performance.now()<ui.statBigT;if(big)rs=r*1.75;
-    const tot=2*rm+2*rs+2*r+32;let x=VW/2-tot/2;cxm=x+rm;x+=2*rm+16;cxs=x+rs;x+=2*rs+16;cx1=x+r;cx2=-999;
+  var cw=0;if(COMPACT){const side=PORTRAIT?10:(touch?12+158*UI_U:12),avail=VW-2*side-32;r=Math.min(38*UI_U,avail/7);rm=r*0.58;
+    const big=ui.statBigT&&performance.now()<ui.statBigT,sc=big?1.5:1;rs=r*1.1*sc;cw=r*4.7*sc; /* v48: tarjeta de estado (alto 2·rs, ancho cw) */
+    const tot=cw+2*r+14;let x=VW/2-tot/2;cxm=-999;cxs=x+cw/2;x+=cw+14;cx1=x+r;cx2=-999;
     cy=PORTRAIT?VH-rs-244*UI_U:VH-rs-6;}
   else{cy=VH-r-(touch?100:14)-6;cx1=VW/2-r-8;cx2=VW/2+r+8;cxs=cx1-2*r-22;cxm=cx1-3*r-22-r*0.6-14;}
   if(COMPACT){const base=cy;cy=base+rs-r;var cyS=base;ui.hudTop=Math.min(cy-r,cyS-rs)-44;
@@ -4299,8 +4371,8 @@ function drawGauges(){
   glass(cx1,cy,r);if(!COMPACT)glass(cx2,cy,r);
   if(p.drsOpen){ /* v45: sello DRS en verde mientras está abierto */ const w=r*0.9,h=r*0.3,yy=cy-r*0.55;ctx.save();ctx.shadowColor='#43e07a';ctx.shadowBlur=12;ctx.fillStyle='#2bd96a';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(cx1-w/2,yy-h/2,w,h,h/2);else ctx.rect(cx1-w/2,yy-h/2,w,h);ctx.fill();ctx.restore();ctx.fillStyle='#062b12';ctx.font='900 '+Math.round(h*0.72)+'px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('DRS',cx1,yy+1);}
   if(p.drsOpen&&!ui.drsWas)audioWhoosh(0.7,0);ui.drsWas=!!p.drsOpen;
-  ui.statHit=COMPACT?{x:cxs,y:cyS,r:rs}:null;
-  drawStatusDial(cxs,COMPACT?cyS:cy,rs);drawModeDial(cxm,COMPACT?cy+r-rm:cy+r*0.3,COMPACT?rm:r*0.56);
+  ui.statHit=COMPACT?{x:cxs,y:cyS,r:Math.max(cw/2,rs)}:null;
+  if(COMPACT)drawStatusCard(cxs,cyS,cw,2*rs);else{drawStatusDial(cxs,cy,rs);drawModeDial(cxm,cy+r*0.3,r*0.56);}
   // luces de cambio
   const nL=10,lw=small?7:9,gap=small?3:4,tot=nL*lw+(nL-1)*gap,lx0=VW/2-tot/2,ly=(COMPACT?Math.min(cy-r,cyS-rs-4):cy-r)-(small?16:20),on=clamp((rpm-13)/5.2,0,1)*nL,blink=rpm>18.2&&(performance.now()%160<80);
   for(let i=0;i<nL;i++){const col=i<4?'#2ee66b':i<7?'#ff3b30':'#3d7bff',lit=blink||i<on;
@@ -4503,7 +4575,30 @@ function pickRows(list,isMe){
   const me=list.findIndex(isMe),keep=new Set([0,1,me-1,me,me+1]);
   return list.map((x,i)=>[x,i]).filter(([x,i])=>keep.has(i));
 }
+/* v48: en el móvil, la caja de arriba es una mini clasificación en directo: sesión/vuelta, 5 filas (los 2 primeros y los que van
+   contigo) con abreviatura y diferencia, y abajo tu vuelta actual con el delta. Sustituye a la barra de números grandes. */
+function abbr(n){const w=String(n||'').trim().split(/\s+/);const b=(w.length>1?w[w.length-1]:w[0])||'?';return b.slice(0,3).toUpperCase();}
+function towerHtml(){const p=R.player;let head='',rows=[];
+  if(document.body.classList.contains('ingarage')&&!R.liveQ)document.body.classList.remove('ingarage');
+  if(R.mode==='quali'){const ql=qualiList(),L=R.liveQ;let hd=R.practice?'Libres':EV&&EV.qfmt?'Q'+(EV.qs+1):'Clasif.';
+    if(L){const rem=Math.max(0,L.T-L.t);hd+=' <b>'+(L.flag?'🏁':Math.floor(rem/60)+':'+String(Math.floor(rem%60)).padStart(2,'0'))+'</b>';}
+    else hd+=' <b>'+(p.lap===0?'Salida':Math.min(p.lap,2)+'/2')+'</b>';
+    head=hd;const cut=EV&&EV.qfmt&&EV.qs<2&&!R.practice?ql.length-qCut():-1,best=ql[0]&&isFinite(ql[0].t)?ql[0].t:null;
+    rows=pickTower(ql,x=>x.e.isPlayer).map(([x,i])=>({i,c:x.e,me:x.e.isPlayer,cut:i===cut,g:!isFinite(x.t)?'—':i===0||best==null?fmt(x.t):'+'+(x.t-best).toFixed(2)}));}
+  else{head='V <b>'+Math.max(1,Math.min(p.lap,R.laps))+'/'+R.laps+'</b>';const lead=R.standings[0];
+    rows=pickTower(R.standings,c=>c.isPlayer).map(([c,i])=>{let g='';if(c.dnf)g='OUT';else if(c.pit)g='BOX';else if(i===0)g=R.phase==='race'?'Líder':'';
+      else if(c.finished&&lead.finished)g='+'+(c.finishTime-lead.finishTime).toFixed(1);else{const ref=R.standings[i-1],d=ref.prog-c.prog;g=d>R.tr.N?'+'+Math.floor(d/R.tr.N)+'v':'+'+(d*R.tr.sp/Math.max(180,Math.hypot(c.vx,c.vy))).toFixed(1);}
+      return {i,c,me:c.isPlayer,g,out:c.dnf};});}
+  const pos=R.mode==='quali'?null:R.standings.indexOf(p)+1;
+  let h='<div class="twh"><span>'+head+'</span>'+(pos?'<span class="twp">P'+pos+'<small>/'+R.cars.length+'</small></span>':'')+'</div>';
+  let prev=-1;for(const r of rows){if(prev>=0&&r.i>prev+1)h+='<div class="twgap"></div>';prev=r.i;
+    h+='<div class="twr'+(r.me?' me':'')+(r.out?' out':'')+(r.cut?' cut':'')+'"><span class="n">'+(r.i+1)+'</span><i style="background:'+r.c.color+'"></i><span class="a">'+(r.me?'TÚ':abbr(r.c.name))+'</span><span class="g">'+r.g+'</span></div>';}
+  h+='<div class="twl"><span>'+esc($('tcur').textContent)+'</span><span class="twd" style="'+($('tdelta').style.cssText||'')+'">'+esc($('tdelta').textContent)+'</span></div>';
+  return h;}
+function pickTower(list,isMe){const me=list.findIndex(isMe),keep=new Set([0,1,me-1,me,me+1]);if(me<=2){keep.add(2);keep.add(3);keep.add(4);}
+  return list.map((x,i)=>[x,i]).filter(([x,i])=>keep.has(i)).slice(0,5);}
 function boardHtml(){
+  if(COMPACT&&R&&!ui.resultsShown)return towerHtml();
   if(R.mode==='quali'){
     // en Q1/Q2/Q3 los tiempos de los rivales van apareciendo durante la sesión, con la línea de corte
     let list=qualiList();const lapT=(R.est&&R.est.lap)||90,qf=EV&&EV.qfmt&&!R.practice;
