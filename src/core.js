@@ -3,7 +3,7 @@ const VMAX=600, ACC=440, BRAKE=540, REV_ACC=260, REV_MAX=120;
 const STEER=3.4, STEER_LOSS=0.42, A_LAT=1250, K_LAT=16;
 const W=60, RUNOFF=230, SP=10, KMH=0.55;
 const HL=19, HW=7.5, INERTIA=(4*HL*HL+4*HW*HW)/12, CARW=2*HW; // coche a escala real: 5,6 m × 2 m (6,5 px/m)
-const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=1.1,BOTAERO=0.75,BOTLIVE=0.9,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6; // fracción de la frenada máxima que usan los bots
+const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=1.1,BOTAERO=0.75,BOTLIVE=0.9,BOTLIVEW=0.82,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6,L1LANE=34,L1FADE=500,L1END=300,L1ENDT=1.6,L1K=1; // fracción de la frenada máxima que usan los bots
 const PIT_LAT=W+65, PIT_BOX=W+99, PIT_V=150, PIT_HALF=26, BOT_BRAKE=BRAKE*0.66;
 // modos de motor: ahorro / normal / ataque
 const EMODES=[{n:'Ahorro',p:0.965,heat:0.55,fuel:0.88,wear:0.5},{n:'Normal',p:1,heat:1,fuel:1,wear:1},{n:'Ataque',p:1.035,heat:1.5,fuel:1.12,wear:2.2}];
@@ -421,7 +421,7 @@ function makeSession(cfg){
       if(e.isPlayer&&!cfg.autopilot){comp=cfg.playerCompound;fuel=typeof cfg.playerFuel==='number'?Math.min(TANK,Math.max(2,cfg.playerFuel)):cfg.playerFuel==='half'?fuelFor(Math.ceil(cfg.laps/2),cfg.est):fuelFor(cfg.laps,cfg.est);}
       else{const full=fuelFor(cfg.laps,cfg.est);const half=Math.random()<0.5&&cfg.laps>=10;/* v45: medio depósito solo en carreras largas (en 5 vueltas obligaba a una parada absurda) */fuel=half?fuelFor(Math.ceil(cfg.laps/2),cfg.est):full;
         const stint=Math.min(cfg.laps,Math.floor(Math.min(fuel,TANK)/cfg.est.fuel));comp=chooseCompound(stint,cfg.est,Math.random());}
-      const car=makeCar(tr,e,g.idx,g.lat,comp,Math.min(TANK,fuel),cfg.autopilot);cars.push(car);
+      const car=makeCar(tr,e,g.idx,g.lat,comp,Math.min(TANK,fuel),cfg.autopilot);car.l1lane=(g.lat>0?1:-1)*L1LANE;cars.push(car);
     });
     if(R.sets){const p=cars.find(c=>c.isPlayer&&!c.bot);if(p)p.wear=takeSet(R,p);}
   }
@@ -536,7 +536,11 @@ function yellowAhead(R,idx,span){const N=R.tr.N;for(const y of R.yellow){const d
 function botControl(R,c,dt){
   const tr=R.tr,N=tr.N,fx=Math.cos(c.a),fy=Math.sin(c.a),vf=c.vx*fx+c.vy*fy;
   if(c.recover>0){c.recover-=dt;if(c.recSteer===0){c.throttle=0;c.brake=0.3;c.steer=0;return;}c.throttle=0;c.brake=1;c.steer=SIMB?c.recSteer:-c.recSteer;return;}
-  const T=c.traits,rlw=1,rlh=tr.rl?tr.rl[(c.idx+10)%N]*rlw:0;let off=rlh+c.baseOff*(tr.rl?(rlw<1?1:0.25):1),slow=1,sideBy=false; /* v46: en la primera vuelta, cada uno conserva más su lado (todos a la misma trazada = choques en la curva 1) */const yel=R.phase==='race'?yellowAhead(R,c.idx,90):0;if(yel)slow=0.85;if(c.temp>118)slow*=0.95;
+  const T=c.traits,rlw=1,rlh=tr.rl?tr.rl[(c.idx+10)%N]*rlw:0;let off=rlh+c.baseOff*(tr.rl?(rlw<1?1:0.25):1),slow=1,sideBy=false; /* v46: en la primera vuelta, cada uno conserva más su lado (todos a la misma trazada = choques en la curva 1) */const yel=R.phase==='race'?yellowAhead(R,c.idx,90):0;let l1w=0;
+  /* v48: salida. En la vuelta 1 cada bot mantiene su carril de la parrilla (dos filas que ocupan todo el ancho) hasta la frenada de la curva 1;
+     antes se ponían en fila en la trazada y se les adelantaba a todos por fuera. Se juntan a la trazada entre ~3,2 y ~1,6 s antes de la curva (L1ENDT; dentro de la curva o en una chicane a 300 km/h, en paralelo, chocaban). */
+  if(R.mode==='race'&&R.phase==='race'&&c.lap<=1&&c.l1lane!=null&&!c.l1done){if(tr.c1s==null){let i=0;while(i<N&&!tr.corner[i])i++;tr.c1s=i;let vm=1e9;for(let k=i;k<i+40;k++)vm=Math.min(vm,(tr.vLimS||tr.vLim)[k%N]);tr.l1ok=!(i*tr.sp>450*6.5&&vm*KMH<120); /* v48: recta larga hacia una curva 1 muy lenta (Monza): en paralelo frenando desde 300 km/h chocaban el doble; ahí van en fila como antes */}if(!tr.l1ok)c.l1done=true;
+    const dc=c.idx<N/2?(tr.c1s-c.idx)*tr.sp:(tr.c1s+N-c.idx)*tr.sp;if(dc<0)c.l1done=true;else {const sv=Math.max(Math.abs(vf),100);l1w=clamp((dc-Math.max(L1END,sv*L1ENDT))/Math.max(L1FADE,sv*L1ENDT),0,1);}}if(yel)slow=0.85;if(c.temp>118)slow*=0.95;
   const underSC=R.sc&&R.sc.phase!=='gone'&&!c.unlap;
   if(c.yieldTo&&!underSC){const m=R.cars.find(o=>o.id===c.yieldTo);if(m&&m.prog<c.prog&&c.prog-m.prog<24){off=m.lat>0?-(W-26):(W-26);slow*=0.9;}else if(m&&m.prog>c.prog+4){c.yieldTo=null;}}
   if(underSC&&!c.pitReq)off=0;
@@ -561,6 +565,7 @@ function botControl(R,c,dt){
       if(T.style==='defensor'&&d<0&&d>-6&&o.lap===c.lap&&R.mode==='race'&&!tr.corner[c.idx]){const kk=tr.k[(c.idx+30)%N];if(Math.abs(kk)>0.0015&&tr.corner[(c.idx+30)%N])off=Math.sign(kk)*(W-34);}
     }
   }
+  if(l1w>0&&tr.l1ok!==false&&!underSC&&!c.pitReq)off=off*(1-l1w*L1K)+c.l1lane*l1w*L1K; /* v48: el carril de salida manda sobre adelantar/rueda con rueda */
   // esquivar restos en la trazada
   if(R.debris&&R.debris.length)for(const d of R.debris){const di=(d.idx-c.idx+N)%N;if(di>2&&di<30&&Math.abs(d.lat-off)<16&&Math.abs(d.lat)<W+10){off=d.lat>off?d.lat-24:d.lat+24;}}
   off=clamp(off,-W+14,W-14);
@@ -615,7 +620,9 @@ function botControl(R,c,dt){
     c.inBrake=brakeZ;
   }
   /* v46: comprobación en directo con el agarre real del coche (gomas gastadas, gasolina, alerón): la tabla daba algunas curvas rápidas «a fondo» y se abrían */
-  if(SIMB&&tr.kR&&!underSC){const gl=gripLat(c,Math.max(150,Math.abs(vf)),R)*BOTLIVE,dec=BOTDEC*G*2.7*0.85;let vb=1e9;for(let k=2;k<64;k+=3){const kk=tr.kR[(c.idx+k)%N];if(kk<2e-5)continue;const vc=Math.sqrt(gl/kk);vb=Math.min(vb,Math.sqrt(vc*vc+2*dec*k*tr.sp));}target=Math.min(target,vb*c.skill*c.pace);}
+  /* v48: en mojado la comprobación usa la frenada real (antes la de seco: llegaban a Eau Rouge frenando a fondo y sin agarre para girar)
+     y deja más margen (el volante del bot al tope solo saca ~75 % del agarre). Medido en Spa con lluvia: 395 → 170 salidas (tests/wetoffs.js). En seco no cambia. */
+  if(SIMB&&tr.kR&&!underSC){const wq=wv>0.02,gl=gripLat(c,Math.max(150,Math.abs(vf)),R)*(wq?BOTLIVEW:BOTLIVE),dec=BOTDEC*G*2.7*0.85*(wq?Math.min(1,Math.pow(tyreGrip(c)*trackGrip(R,c)/0.95,1.5)):1);let vb=1e9;for(let k=2;k<64;k+=3){const kk=tr.kR[(c.idx+k)%N];if(kk<2e-5)continue;const vc=Math.sqrt(gl/kk);vb=Math.min(vb,Math.sqrt(vc*vc+2*dec*k*tr.sp));}target=Math.min(target,vb*c.skill*c.pace);}
   if(SIMB){const kk=Math.max(Math.abs(tr.k[(c.idx+4)%N]),Math.abs(tr.k[(c.idx+10)%N]));target*=Math.sqrt(Math.max(0.55,1-kk*Math.abs(c.offset)*1.2));}
   if(underSC){ // en fila detrás del coche de seguridad / del de delante, sin adelantar
     let ahead=null,da=1e9;for(const o of R.cars){if(o===c||o.pit||o.dnf||o.finished||(rc&&o===rc))continue;const d=o.prog-c.prog;if(d>0&&d<da){da=d;ahead=o;}}
