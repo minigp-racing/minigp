@@ -3,7 +3,7 @@ const VMAX=600, ACC=440, BRAKE=540, REV_ACC=260, REV_MAX=120;
 const STEER=3.4, STEER_LOSS=0.42, A_LAT=1250, K_LAT=16;
 const W=60, RUNOFF=230, SP=10, KMH=0.55;
 const HL=19, HW=7.5, INERTIA=(4*HL*HL+4*HW*HW)/12, CARW=2*HW; // coche a escala real: 5,6 m × 2 m (6,5 px/m)
-const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97; // fracción de la frenada máxima que usan los bots
+const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=1.1; // fracción de la frenada máxima que usan los bots
 const PIT_LAT=W+65, PIT_BOX=W+99, PIT_V=150, PIT_HALF=26, BOT_BRAKE=BRAKE*0.66;
 // modos de motor: ahorro / normal / ataque
 const EMODES=[{n:'Ahorro',p:0.965,heat:0.55,fuel:0.88,wear:0.5},{n:'Normal',p:1,heat:1,fuel:1,wear:1},{n:'Ataque',p:1.035,heat:1.5,fuel:1.12,wear:2.2}];
@@ -15,7 +15,7 @@ function gripLat(c,v,R){ // aceleración lateral máxima (px/s²)
   const wf=0.75+0.5*(c.wing==null?0.5:c.wing),S=SURF[c.surf];
   const cf=c.cf||{aero:1,mech:1};
   const aero=AERO*cf.aero*wf*Math.min(1.2,(v/VMAX)*(v/VMAX))*(paved(c.surf)?1:0.3)/(1+0.14*c.fuel/TANK);
-  return G*(MECH*cf.mech*S.grip*trackGrip(R,c)+aero)*tyreGrip(c)*(1-0.15*c.dWing)*(1-0.12*c.dSusp)*(c.punct?0.55:1)*(c.ooc>R.t?0.5:1);
+  return G*(MECH*cf.mech*S.grip*trackGrip(R,c)+aero)*tyreGrip(c)*(1-0.15*c.dWing)*(1-0.12*c.dSusp)*(c.punct?0.55:1)*(c.ooc>R.t?0.5:1)*(c.wrecked&&!c.cleared?0.12:1);
 }
 // v45: temperatura (c.bT, °C) y desgaste (c.bW, 0-1) de los frenos de carbono.
 // Fríos (<250 °C) muerden menos; muy calientes (>950 °C) pierden eficacia; gastados, algo menos de frenada.
@@ -576,7 +576,9 @@ function botControl(R,c,dt){
     if(c.recN>=(c.surf==="gravel"?1:c.off?2:4)){c.recN=0;const j=c.idx,sg=Math.sign(c.lat)||1;c.x=tr.xs[j]+tr.nx[j]*sg*(W-20);c.y=tr.ys[j]+tr.ny[j]*sg*(W-20);c.a=tr.ang[j];c.vx=0;c.vy=0;c.r=0;c.recover=2.5;c.recSteer=0;if(R.fx)R.events.push({type:'marshal',car:c});}}}
   else{c.stuckT=0;if(Math.abs(vf)>90)c.recN=0;}
   const wv=clamp((c.wet||0)*1.6,0,1),vl0=R.steerMode==='sim'&&tr.vWet&&wv>0.02?tr.vLimS[(c.idx+2)%N]*(1-wv)+tr.vWet[(c.idx+2)%N]*wv:(R.steerMode==='sim'?tr.vLimS:tr.vLim)[(c.idx+2)%N];
-  const gF=Math.sqrt((R.steerMode==='sim'?1:wingAero(c,vl0))*tyreGrip(c)*(1-0.15*c.dWing)*(1-0.12*c.dSusp)*(c.punct?0.55:1));
+  const gRaw=(R.steerMode==='sim'?1:wingAero(c,vl0))*tyreGrip(c)*(1-0.15*c.dWing)*(1-0.12*c.dSusp)*(c.punct?0.55:1);
+  /* v46: con poco agarre (mojado, gomas frías o equivocadas) el bot es más prudente que la raíz cuadrada: antes se salía un 10-20 % del tiempo */
+  const wRel=wetFactor(c.compound,c.wet||0)*tyreTempF(c)*(c.aqua>0?0.28:1),gF=Math.sqrt(gRaw)*(wRel<0.95?Math.pow(wRel,WGX-0.5):1);
   // en recta el agarre apenas limita (solo prudencia); en curva y frenada, sí
   let target=vl0*c.skill*c.pace*slow*(vl0>=VMAX*1.02?Math.min(1,0.9+0.1*gF):gF);
   // primera vuelta con la parrilla agrupada: se frena antes en las curvas y se deja más aire al de delante
@@ -617,7 +619,8 @@ function botControl(R,c,dt){
     const scd=scProg(R)-c.prog;let fv,fd;
     if(scd>0&&scd<da&&R.sc.phase!=='gone'){fv=R.sc.v;fd=scd*tr.sp;}else if(ahead){fv=Math.max(0,ahead.vx*tr.tx[ahead.idx]+ahead.vy*tr.ty[ahead.idx]);fd=da*tr.sp;}
     if(fv!=null){const D=60+Math.abs(vf)*0.22,ab=ahead&&ahead.brake>0.6&&fd<D*1.3&&!(scd>0&&scd<da)?ahead.brake*60:0;target=Math.min(target,fd<D*0.7?Math.max(0,fv*0.7-ab):Math.max(0,fv-ab+(fd-D)*0.6));}
-    target=Math.min(target,(SIMB?tr.vLimS:tr.vLim)[(c.idx+2)%N]*0.85);
+    const far=fd!=null&&fd/Math.max(120,fv||120)>5; /* v46: a más de 5 s del de delante, el rezagado aprieta para cerrar el hueco */
+    target=Math.min(target,(SIMB?tr.vLimS:tr.vLim)[(c.idx+2)%N]*(far?0.97:0.85));
   }
   if(c.unlap&&R.sc)target=Math.min(target,(SIMB?tr.vLimS:tr.vLim)[(c.idx+2)%N]*0.93); /* desdoblándose: rápido pero sin arriesgar */
   if(!paved(c.surf))target=Math.min(target,SIMB?150:200);
@@ -1127,7 +1130,7 @@ function formationStep(R,dt){
 // Un golpe muy fuerte rompe el coche: salen ruedas, alerones, morro y paneles que se deslizan, rebotan en los muros
 // y se pueden golpear. El chasis queda parado. Los comisarios los retiran durante el safety car.
 function addDebris(R,c,type,lx,ly,vx,vy,spread){
-  if(!R.debris)R.debris=[];if(R.debris.length>180)R.debris.shift();
+  if(!R.debris)R.debris=[];if(R.debris.length>260)R.debris.shift();
   const ca=Math.cos(c.a),sa=Math.sin(c.a),a=Math.random()*Math.PI*2,sp=spread*(0.4+Math.random()*0.8);
   const sz={wheel:3.2,fwing:6,rwing:4,nose:4,panel:4,plate:3,mirror:1.4,bit:1.6,shard:1}[type]||3;
   const d={type,x:c.x+ca*lx-sa*ly,y:c.y+sa*lx+ca*ly,vx:vx+Math.cos(a)*sp,vy:vy+Math.sin(a)*sp,a:c.a+(Math.random()-0.5)*2,va:(Math.random()-0.5)*(type==='wheel'?6:14),
@@ -1152,10 +1155,10 @@ function wreck(R,c,power,lx,ix,iy){
   // v45: golpe brutal: el coche vuela y da vueltas de campana (se ve el fondo plano), y es más fácil que arda
   if(power>330){const dur=0.8+Math.min(1.3,(power-330)/280);c.tumble={t0:R.t,dur,spins:1+Math.floor(Math.random()*1.6+(power-330)/260),axis:Math.random()<0.6?0:1};c.air=dur;c.airT=R.t;}
   const big=clamp((power-200)/300,0.6,1.6);
-  for(let k=0;k<Math.round((3+Math.random()*4)*big);k++)add('panel',(Math.random()-0.5)*20,(Math.random()-0.5)*10,1);
+  for(let k=0;k<Math.round((5+Math.random()*5)*big);k++)add('panel',(Math.random()-0.5)*20,(Math.random()-0.5)*10,1);
   for(let k=0;k<2;k++)if(Math.random()<0.6)add('mirror',4,(k?-1:1)*5,1.3);
-  for(let k=0;k<Math.round((14+Math.random()*10)*big);k++)add('bit',(Math.random()-0.5)*20,(Math.random()-0.5)*10,1.5);
-  for(let k=0;k<Math.round((18+Math.random()*14)*big);k++)add('shard',(Math.random()-0.5)*20,(Math.random()-0.5)*10,1.8);
+  for(let k=0;k<Math.round((22+Math.random()*14)*big);k++)add('bit',(Math.random()-0.5)*20,(Math.random()-0.5)*10,1.5);
+  for(let k=0;k<Math.round((28+Math.random()*20)*big);k++)add('shard',(Math.random()-0.5)*20,(Math.random()-0.5)*10,1.8);
   // el chasis sigue deslizando y girando sin control
   c.av+=(Math.random()-0.5)*Math.min(8,power/70);c.r=(c.r||0)+(Math.random()-0.5)*Math.min(8,power/70);c.noESC=R.t+30;
   if(power>360&&!c.tumble){c.air=Math.min(0.85,0.25+(power-360)/500);c.airT=R.t;} // golpe brutal: el coche salta un instante
@@ -1175,7 +1178,7 @@ function stepDebris(R,dt){
   for(let k=D.length-1;k>=0;k--){const d=D[k];
     if(d.clearAt!=null&&R.t>d.clearAt){D.splice(k,1);continue;}
     const v=Math.hypot(d.vx,d.vy);
-    if(v>0.5){const on=Math.abs(d.lat)<W+KERB,mu=({wheel:0.8,shard:2.6,bit:2.2,mirror:2,panel:1.6,plate:1.6}[d.type]||1.3)*(on?1:2.2)*G,dv=Math.min(v,mu*dt);d.vx-=d.vx/v*dv;d.vy-=d.vy/v*dv;}
+    if(v>0.5){const on=Math.abs(d.lat)<W+KERB,mu=({wheel:0.5,shard:1.7,bit:1.4,mirror:1.3,panel:1,plate:1}[d.type]||0.85)*(on?1:2.2)*G /* v46: los restos resbalan más lejos */,dv=Math.min(v,mu*dt);d.vx-=d.vx/v*dv;d.vy-=d.vy/v*dv;}
     else{d.vx=0;d.vy=0;}
     d.va*=Math.exp(-(d.type==='wheel'?0.6:1.8)*dt);d.a+=d.va*dt;d.x+=d.vx*dt;d.y+=d.vy*dt;
     locate(tr,d);
@@ -1327,7 +1330,9 @@ function stepRace(R,dt){
     }
   }
   for(const c of cars){
-    if(c.dnf){c.throttle=0;c.brake=1;c.steer=0;
+    if(c.dnf){c.throttle=0;c.brake=c.wrecked&&!c.cleared?0.05:1;c.steer=0;
+      /* v46: el chasis destrozado no frena: se arrastra sobre el fondo plano con la inercia que llevaba (poco roce en asfalto, mucho en la grava) */
+      if(c.wrecked&&!c.cleared){const v=Math.hypot(c.vx,c.vy);if(v>1){const mu=(c.surf==='gravel'?2.2:c.surf==='grass'?0.7:0.42)*G*((c.air||0)>0?0.2:1),dv=Math.min(v,mu*dt);c.vx-=c.vx/v*dv;c.vy-=c.vy/v*dv;}}
       if(Math.abs(c.lat)<W+70&&!c.pit&&!c.wrecked){const sg=Math.sign(c.lat)||1,i=c.idx,mv=40*dt;c.x+=tr.nx[i]*sg*mv;c.y+=tr.ny[i]*sg*mv;}}
     else if(c.engineDead&&c.bot){c.recover=0;c.stuckT=0;c.throttle=0;c.brake=0.35;const la=(c.idx+12)%N;steerTo(c,tr,la,(Math.sign(c.lat)||1)*(W+50));}
     else if(c.pit)pitControl(R,c,dt);

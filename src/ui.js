@@ -143,14 +143,14 @@ function realTex(name){
     PAT[name]=pat;TILES.forEach(v=>tileFree.push(v.c));TILES.clear();};
   im.src=TEXDATA[name];
 }
-/* v46 (prueba en Monza): texturas fotográficas reales, sin teñir (Poly Haven, CC0), a su tamaño aproximado en metros (6,5 px = 1 m).
-   Se cargan desde img/tex solo al correr en Monza; en Ajustes → «Monza (prueba)» se puede volver al dibujado. */
+/* v46: texturas fotográficas reales (primero se probaron en Monza; ahora en todos los circuitos), sin teñir (Poly Haven, CC0), a su tamaño aproximado en metros (6,5 px = 1 m).
+   Se cargan desde img/tex al empezar a correr; en Ajustes → «Suelo de los circuitos» se puede volver al dibujado. */
 const REALTEX={asphalt:{src:'img/tex/aerial_asphalt_01_diff_1k.jpg',m:30,px:1024},grass:{src:'img/tex/grass_ground_diff_1k.jpg',m:8,px:256},gravel:{src:'img/tex/gravel_floor_02_diff_1k.jpg',m:5,px:256},runoffG:{src:'img/tex/dirt_aerial_02_diff_1k.jpg',m:20,px:512}};
 const PATR={};let PATRset=null,realTexLoading=false;
 function loadRealTex(){if(realTexLoading)return;realTexLoading=true;
   for(const k in REALTEX){const cf=REALTEX[k],im=new Image();im.onload=()=>{const o=document.createElement('canvas');o.width=o.height=cf.px;const g=o.getContext('2d');g.drawImage(im,0,0,cf.px,cf.px);
     const pat=ctx.createPattern(o,'repeat');if(pat.setTransform)pat.setTransform(new DOMMatrix().scale(cf.m*6.5/cf.px));PATR[k]=pat;PATRset=null;try{clearTiles();}catch(e){}};im.src=cf.src;}}
-function texSet(tr){if(settings.realtex===0||!tr||tr.ti!==0||tr.photo)return PAT;loadRealTex();if(!PATRset){PATRset=Object.assign({},PAT);for(const k of ['asphalt','grass','gravel'])if(PATR[k])PATRset[k]=PATR[k];PATRset.real=true;}return PATRset;}
+function texSet(tr){if(settings.realtex===0||!tr||tr.photo)return PAT;loadRealTex();if(!PATRset){PATRset=Object.assign({},PAT);for(const k of ['asphalt','grass','gravel'])if(PATR[k])PATRset[k]=PATR[k];PATRset.real=true;}return PATRset;}
 // árboles: copas pre-dibujadas con volumen y sombra (más baratos que dibujarlos con círculos cada fotograma)
 const TREE_SPR=[0,1,2,3].map(v=>{const R=rng(70+v),S=96,o=document.createElement('canvas');o.width=o.height=S;const g=o.getContext('2d'),c=S/2;
   const base=[[34,92,38],[28,84,34],[46,104,40],[38,86,30]][v];
@@ -580,19 +580,17 @@ function voiceSelect(){const vs=esVoices(),best=pickVoice();if(!vs.length)return
 function openSettings(){
   $('steerSeg').innerHTML=segHtml('settings','steer',OPT.steer);$('steerAdjMenu').innerHTML=steerAdjHtml();$('engSnd').innerHTML=engSoundHtml();
   $('sndOpts').innerHTML=`<span class="fl">Ingeniero por radio</span>${segHtml('settings','voice',OPT.voice)}<span class="fl">Cuánto habla</span>${segHtml('settings','radioLvl',[[0,'Solo lo importante'],[1,'Normal']])}<span class="fl">Voz del ingeniero</span>${voiceSelect()}<span class="fl">Sonido general</span>${segHtml('settings','snd',[[1,'Activado'],[0,'Silencio']])}<span class="fl">Vibración (móvil)</span>${segHtml('settings','vib',[[1,'Sí'],[0,'No']])}`;
-  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Montmeló</span>${segHtml('settings','photo',[[0,'Dibujado (nítido)'],[1,'Foto aérea real']])}<span class="fl">Monza (prueba)</span>${segHtml('settings','realtex',[[1,'Texturas reales'],[0,'Dibujado']])}<span class="fl">Estilo de los coches</span>${segHtml('settings','carStyle',[[0,'Realista'],[1,'Clásico']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
+  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Montmeló</span>${segHtml('settings','photo',[[0,'Dibujado (nítido)'],[1,'Foto aérea real']])}<span class="fl">Suelo de los circuitos</span>${segHtml('settings','realtex',[[1,'Texturas reales'],[0,'Dibujado']])}<span class="fl">Estilo de los coches</span>${segHtml('settings','carStyle',[[0,'Realista'],[1,'Clásico']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
   $('engPick').onclick=engWavPick;if($('engDel'))$('engDel').onclick=()=>{try{localStorage.removeItem(ENGWAV_KEY);}catch(e){}settings.engMode='synth';saveSettings();engSampleStop();openSettings();};
   if($('voiceSel')){$('voiceSel').onchange=e=>{settings.voiceName=e.target.value;saveSettings();};$('voiceTry').onclick=()=>{try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance('Box, box. Ponemos medios y salimos por delante de Ortega.');u.lang='es-ES';u.rate=1.06;const v=pickVoice();if(v)u.voice=v;speechSynthesis.speak(u);}catch(e){}};}
   showOnly('settings');}
-/* v46: elige tu piloto (nombre) y tu escudería en carrera rápida y campeonato. Tu sitio lo deja un piloto de ese equipo;
-   al cambiar de equipo, el piloto que habías desplazado vuelve a su asiento (d.prev). */
+/* v46: elige tu piloto en carrera rápida y campeonato, entre los de «Equipos y pilotos» */
 function meFind(){for(let i=0;i<TEAMS.length;i++)for(let j=0;j<TEAMS[i].drivers.length;j++)if(TEAMS[i].drivers[j].player)return {i,j,d:TEAMS[i].drivers[j]};return null;}
-function setMe(ti,name){const cur=meFind();if(name==null)name=cur?cur.d.name:'Tú';
-  if(cur&&cur.i===ti){cur.d.name=name;saveTeams();return;}
-  if(cur){const back=cur.d.prev||(DEFAULT_TEAMS[cur.i]&&!DEFAULT_TEAMS[cur.i].drivers[cur.j].player?clone(DEFAULT_TEAMS[cur.i].drivers[cur.j]):{name:['A. Ferrer','D. Navarro','M. Castell','R. Lindgren','G. Moretti','I. Duval'].find(n=>!TEAMS.some(t=>t.drivers.some(d=>d.name===n)))||'Reserva',rating:93});delete back.player;TEAMS[cur.i].drivers[cur.j]=back;}
-  const t=TEAMS[ti],k=(t.drivers[0].rating||0)<=(t.drivers[1].rating||0)?0:1,prev=t.drivers[k];t.drivers[k]={name,rating:100,player:true,prev};saveTeams();}
-function meHtml(){const cur=meFind();return `<section class="mgrp"><h3>Tu piloto</h3><div class="two"><div><span class="fl">Nombre</span><input type="text" id="meName" maxlength="18" value="${esc(cur?cur.d.name:'Tú')}" style="width:100%"></div><div><span class="fl">Escudería</span><select id="meTeam" style="width:100%">${TEAMS.map((t,i)=>`<option value="${i}" ${cur&&cur.i===i?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div></div></section>`;}
-function meBind(){const n=$('meName'),t=$('meTeam');if(!n||!t)return;n.oninput=()=>{const cur=meFind();if(cur){cur.d.name=n.value.trim()||'Tú';saveTeams();}};t.onchange=()=>setMe(+t.value,n.value.trim()||'Tú');}
+function meHtml(){const cur=meFind();return `<section class="mgrp"><h3>Tu piloto</h3><div class="two"><div class="wide2"><span class="fl">Eliges a uno de los pilotos de «Equipos y pilotos» (ahí puedes cambiar nombres y equipos)</span><select id="meDrv" style="width:100%">${TEAMS.map((t,i)=>`<optgroup label="${esc(t.name)}">${t.drivers.map((d,j)=>`<option value="${i}:${j}" ${d.player?'selected':''}>${esc(d.name)}</option>`).join('')}</optgroup>`).join('')}</select></div></div></section>`;}
+/* v46: elegir piloto = el mismo «Tú» del editor de equipos. El que deja de ser tuyo vuelve a ser un rival normal (o recupera al piloto que había desplazado) */
+function pickMe(i,j){const cur=meFind();if(cur&&cur.i===i&&cur.j===j)return;if(cur){const d=cur.d;if(d.prev){const b=d.prev;delete b.player;TEAMS[cur.i].drivers[cur.j]=b;}else{d.player=false;if(d.rating>98)d.rating=94;if(d.name==='Tú')d.name=['A. Ferrer','D. Navarro','M. Castell','R. Lindgren','G. Moretti','I. Duval'].find(n=>!TEAMS.some(t=>t.drivers.some(x=>x.name===n)))||'Reserva';}}
+  TEAMS[i].drivers[j].player=true;saveTeams();}
+function meBind(){const s=$('meDrv');if(!s)return;s.onchange=()=>{const [i,j]=s.value.split(':').map(Number);pickMe(i,j);};}
 function openQuick(){
   const ti=settings.track,T=TRACKS[ti],inf=trackInfo(ti),F=(l,h)=>`<div><span class="fl">${l}</span>${h}</div>`;
   const grp=(ic,title,body,cls='')=>`<section class="mgrp ${cls}"><h3>${icon(ic,20)}${title}</h3><div class="two">${body}</div></section>`;
