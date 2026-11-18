@@ -3,8 +3,8 @@
 // Uso: node tests/pitdrive.js index.html  (TR=4,0,12,3)
 const fs=require('fs');const core=fs.readFileSync(process.argv[2],'utf8').split('// CORE START')[1].split('// CORE END')[0];
 const A=new Function(core+';return {makeSession,stepRace,rosterFromTeams,DEFAULT_TEAMS,simEstimate,TRACKS,lpPit,dOf,angNorm,PIT_V,KMH};')();
-for(const ti of (process.env.TR||'4,0,12,3').split(',').map(Number))for(const enter of [true,false]){const est=A.simEstimate(ti,1,'sim');
-  const R=A.makeSession({track:ti,laps:4,mult:1,mode:'race',steerMode:'sim',fx:true,est,grid:A.rosterFromTeams(A.DEFAULT_TEAMS,6,'normal'),playerFuel:'full',playerCompound:'M',autopilot:false,aids:true});
+for(const ti of (process.env.TR||'4,0,12,3').split(',').map(Number))for(const [enter,aids] of [[true,true],[true,false],[false,true]]){const est=A.simEstimate(ti,1,'sim');
+  const R=A.makeSession({track:ti,laps:4,mult:1,mode:'race',steerMode:'sim',fx:true,est,grid:A.rosterFromTeams(A.DEFAULT_TEAMS,6,'normal'),playerFuel:'full',playerCompound:'M',autopilot:false,aids});
   const p=R.player,tr=R.tr,N=tr.N;R.input={};let ev=[],maxPit=0,entered=false,stopped=false,out=false,lapAfter=0;
   while(R.t<500&&p.lap<4&&!p.dnf){
     const d=A.dOf(tr,p.idx);if(p.lap===2&&!p.pitReq&&!stopped&&d<-300)p.pitReq=true;
@@ -14,4 +14,4 @@ for(const ti of (process.env.TR||'4,0,12,3').split(',').map(Number))for(const en
     R.input={left:err<-0.02,right:err>0.02,up:v<vt,down:v>vt+25};
     A.stepRace(R,1/120);for(const e of R.events)if(e.car===p&&/^pit/.test(e.type))ev.push(e.type);R.events.length=0;
     if(p.pit==='in')entered=true;if(p.pit==='service')stopped=true;if(stopped&&p.pit==null)out=true;if(p.pit)maxPit=Math.max(maxPit,Math.hypot(p.vx,p.vy)*A.KMH);}
-  console.log(A.TRACKS[ti].short.padEnd(10),enter?'se mete :':'no entra:','entra',entered,'para',stopped,'sale',out,'vuelta',p.lap,'máx en pit',maxPit.toFixed(0)+' km/h','eventos',[...new Set(ev)].join(','),p.dnf?'ABANDONO':'');}
+  console.log(A.TRACKS[ti].short.padEnd(10),(enter?'se mete':'no entra')+(aids?' ayudas:':' sin ayudas:'),'entra',entered,'para',stopped,'sale',out,'vuelta',p.lap,'máx en pit',maxPit.toFixed(0)+' km/h','eventos',[...new Set(ev)].join(','),'sanción',p.pen,p.dnf?'ABANDONO':'');}

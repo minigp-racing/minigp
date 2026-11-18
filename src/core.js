@@ -321,6 +321,9 @@ function locate(tr,c){
 function onPitLane(tr,c){const d=dOf(tr,c.idx);if(d<-(PITL+PITE+2)||d>PITL+PITE+2)return false;const sl=c.lat*tr.pitSide;if(d>=-(PITL+2)&&d<=PITL+2)return sl>W-5&&sl<PIT_BOX+24;return Math.abs(sl-lpPit(d))<PIT_HALF+4;}
 
 const DIFF={facil:[0.84,0.93],normal:[0.91,0.985],dificil:[0.96,1.035],experto:[1.0,1.06]};
+/* v50: dificultad adaptativa: el nivel de los bots se ajusta tras cada carrera a tu ritmo (ADAPT, lo guarda la interfaz) */
+let ADAPT=0;
+let DEFMIN=0.45,DEFK=0.4; /* v50: bots que defienden (carácter mínimo y fuerza base) */
 
 // carácter de cada piloto: si no se ha definido a mano, se deriva de su nombre (siempre el mismo para el mismo piloto)
 const STYLES={defensor:{n:'defiende muy duro',def:0.92},agresivo:{n:'muy agresivo atacando',agr:0.92},cuidadoso:{n:'cuida mucho los neumáticos',bru:0.05},rompe:{n:'castiga mucho los neumáticos',bru:0.8},metronomo:{n:'un metrónomo, casi no falla',reg:0.95},irregular:{n:'rápido pero irregular, comete errores',reg:0.15,agr:0.7}};
@@ -348,7 +351,7 @@ const DEFAULT_TEAMS=[
 // equipos -> lista de participantes. El equipo del jugador siempre entra.
 function rosterFromTeams(teams,nCars,diff){
   if(teams.length<Math.round(nCars/2))teams=teams.concat(DEFAULT_TEAMS.slice(teams.length).map(t=>JSON.parse(JSON.stringify(t))));
-  const [lo,hi]=DIFF[diff],nT=Math.max(1,Math.min(teams.length,Math.round(nCars/2)));
+  const [lo,hi]=diff==='auto'?[0.91+ADAPT,0.985+ADAPT]:DIFF[diff]||DIFF.normal,nT=Math.max(1,Math.min(teams.length,Math.round(nCars/2)));
   let idx=teams.map((t,i)=>i);
   const pt=teams.findIndex(t=>t.drivers.some(d=>d.player));
   let use=idx.slice(0,nT);
@@ -430,7 +433,9 @@ function makeSession(cfg){
         const stint=Math.min(cfg.laps,Math.floor(Math.min(fuel,TANK)/cfg.est.fuel));comp=chooseCompound(stint,cfg.est,Math.random());}
       const car=makeCar(tr,e,g.idx,g.lat,comp,Math.min(TANK,fuel),cfg.autopilot);car.l1lane=(g.lat>0?1:-1)*L1LANE;cars.push(car);
     });
-    if(R.sets){const p=cars.find(c=>c.isPlayer&&!c.bot);if(p)p.wear=takeSet(R,p);}
+    /* v50: neumáticos con historia: los que pasaron a la Q3 salen con el juego de su mejor vuelta de la Q2 (si la salida es en seco) */
+    const qT=cfg.qTyre||{};for(const c of cars){const q=qT[c.id];if(!q||COMPOUNDS[q.comp].wet||cfg.weather==='rain')continue;c.compound=q.comp;c.tws=q.tws.slice();c.wear=Math.max(...c.tws);c.qUsed=true;if(c.isPlayer&&!c.bot&&R.sets&&R.sets[q.comp]>0)R.sets[q.comp]--;}
+    if(R.sets){const p=cars.find(c=>c.isPlayer&&!c.bot&&!c.qUsed);if(p)p.wear=takeSet(R,p);}
   }
   usePit(tr);
   R.player=cars.find(c=>c.isPlayer)||cars[0];
@@ -569,7 +574,9 @@ function botControl(R,c,dt){
       // defender: un solo movimiento y solo si el de detrás aún no ha metido el morro
       if(d<0&&d*tr.sp<-(2*HL+14)&&d>-14&&!tr.corner[c.idx]&&o.lap===c.lap&&T.def>0.3&&Math.abs(o.lat-c.lat)>8&&!c.defended){off=c.lat+(o.lat-c.lat)*0.6*T.def;}
       // v45: el defensor, con alguien pegado y una curva cerca, cierra el interior antes de frenar
-      if(T.style==='defensor'&&d<0&&d>-6&&o.lap===c.lap&&R.mode==='race'&&!tr.corner[c.idx]){const kk=tr.k[(c.idx+30)%N];if(Math.abs(kk)>0.0015&&tr.corner[(c.idx+30)%N])off=Math.sign(kk)*(W-34);}
+      /* v50: no solo el defensor: con un rival pegado (no de su equipo) y una curva cerca, casi todos cierran el interior antes de frenar.
+         Cuánto lo cierran depende de su carácter (T.def); el defensor, del todo y desde un poco más lejos. */
+      if((T.style==='defensor'||T.def>=DEFMIN)&&d<0&&d>(T.style==='defensor'?-8:-6)&&o.lap===c.lap&&o.team!==c.team&&!dead&&R.mode==='race'&&c.lap>=2&&!tr.corner[c.idx]){const j=(c.idx+30)%N,kk=tr.k[j];if(Math.abs(kk)>0.0015&&tr.corner[j])off=Math.sign(kk)*(W-34)*(T.style==='defensor'?1:DEFK+(1-DEFK)*T.def);}
     }
   }
   if(l1w>0&&tr.l1ok!==false&&!underSC&&!c.pitReq)off=off*(1-l1w*L1K)+c.l1lane*l1w*L1K; /* v48: el carril de salida manda sobre adelantar/rueda con rueda */
@@ -693,6 +700,10 @@ function pitControl(R,c,dt){
       if(c.pit==='out'&&d<bd-25){const j=((tr.pitOut==null?0:0)+Math.round(bd+6)%N+N)%N;const l2=tr.pitSide*PIT_BOX;c.x=tr.xs[j]+tr.nx[j]*l2;c.y=tr.ys[j]+tr.ny[j]*l2;c.a=tr.ang[j];}}}
   /* v49: el jugador conduce por el pit lane; limitador (a partir de la línea) y parada en su box automáticos */
   if(!c.bot){playerControl(R,c,dt);let cap=d>=-PITL-1&&d<=PITL+1?PIT_V:1e9;
+    /* v50: velocidad en la línea del pit lane. Con ayudas frena solo antes de la línea; sin ayudas frenas tú.
+       Pasar la línea a más de ~90 km/h en carrera = +5 s. Dentro, el limitador sigue siendo automático. */
+    if(c.pit==='in'&&d<-PITL-1&&R.aids)cap=Math.sqrt(PIT_V*PIT_V*0.85+2*130*Math.max(0,(-PITL-3-d)*tr.sp));
+    if(c.pit==='in'&&!c.pitLineX&&d>=-PITL-1&&d<0){c.pitLineX=true;if(vf>PIT_V*1.1){const kmh=Math.round(vf*KMH);if(R.mode==='race'){c.pen+=5;c.pens=(c.pens||0)+1;}if(R.fx)R.events.push({type:'pit_speed',car:c,kmh,pen:R.mode==='race'});}}
     if(c.pit==='in'){const rem=(bd-d)*tr.sp;if(d>=-PITL-5&&rem<260)cap=Math.min(cap,Math.max(18,Math.sqrt(Math.max(0,2*420*(rem-6)))));
       if(rem<70&&rem>-15){const ti2=(c.idx+4)%N;steerTo(c,tr,ti2,tr.pitSide*PIT_BOX);}
       if((rem<9&&Math.abs(vf)<35)||rem<-15)startService(R,c,vf);}
@@ -716,7 +727,7 @@ function pitControl(R,c,dt){
   }
   speedCtl(c,vf,target);
 }
-function startService(R,c,vf){{c.pit='service';c.rainCall=false;if(c.bot&&R.mode==='race'){const k=compoundFor(R,c,c.nextCompound);if(!(c.rainCall&&k===c.compound))c.nextCompound=k;} /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
+function startService(R,c,vf){{c.pit='service';c.pitLineX=false;c.rainCall=false;if(c.bot&&R.mode==='race'){const k=compoundFor(R,c,c.nextCompound);if(!(c.rainCall&&k===c.compound))c.nextCompound=k;} /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
       if(R.liveQ){c.fuelAdd=0;c.pitReq=false;c.qFly=false;const L=R.liveQ,nx=c.qRuns?c.qRuns[++c.qRun]:null;c.pitT=(!c.bot||L.flag||c.qDone||nx==null)?1e9:Math.max(3,nx-L.t);c.pitTotal=c.pitT;}
       if(R.fx)R.events.push({type:'pitstop',car:c});}
 }
@@ -1105,6 +1116,17 @@ function teamOrders(R){
     const fast=c.skill*c.pace*(1-0.5*c.wear),slow=mate.skill*mate.pace*(1-0.5*mate.wear);
     c.mateBehindT=(c.mateBehindT||0)+0.5;
     if(fast>slow*1.01&&c.mateBehindT>12&&!mate.yieldTo&&!(c.orderCool>R.t)){mate.yieldTo=c.id;mate.yieldUntil=R.t+10;c.orderCool=R.t+90;c.mateBehindT=0;if(R.fx)R.events.push({type:'teamorder',car:mate,to:c});}}
+  /* v50: órdenes de equipo con el jugador. Si vas pegado a tu compañero (bot) y eres más rápido, te deja pasar;
+     si él te alcanza y es más rápido, el equipo te pide que le dejes pasar (sin sanción si no obedeces). */
+  {const p=R.player;if(p&&!p.bot&&!p.dnf&&!p.pit&&!p.finished&&p.lap>=2){const m=R.cars.find(o=>o!==p&&o.team===p.team&&o.bot&&!o.dnf&&!o.pit&&!o.finished);
+    if(m){const d=m.prog-p.prog,pl=p.lastLap||1e9,ml=m.lastLap||1e9;
+      if(d>0&&d<14){p.mateBehindT=(p.mateBehindT||0)+0.5;if(p.mateBehindT>10&&pl<ml+0.15&&!m.yieldTo&&!(p.orderCool>R.t)){m.yieldTo=p.id;m.yieldUntil=R.t+10;p.orderCool=R.t+90;p.mateBehindT=0;if(R.fx)R.events.push({type:'teamorder',car:m,to:p});}}
+      else p.mateBehindT=0;
+      if(d<0&&d>-14){m.mateBehindT=(m.mateBehindT||0)+0.5;const fast=ml<pl-0.4||(p.wear-m.wear>0.25);
+        if(m.mateBehindT>12&&fast&&!p.askYield&&!(m.orderCool>R.t)){p.askYield={id:m.id,t:R.t,prog:m.prog-p.prog};m.orderCool=R.t+120;m.mateBehindT=0;if(R.fx)R.events.push({type:'teamorder_me',car:p,to:m});}}
+      else m.mateBehindT=0;
+      if(p.askYield&&p.askYield.id===m.id){if(m.prog>p.prog){if(R.fx)R.events.push({type:'teamorder_ok',car:p,to:m});p.askYield=null;}
+        else if(R.t-p.askYield.t>20){if(R.fx)R.events.push({type:'teamorder_no',car:p,to:m});p.askYield=null;}}}}}
   for(const c of R.cars)if(c.yieldTo&&R.t>c.yieldUntil){c.yieldTo=null;}
 }
 // ---------- la pista evoluciona: goma en la trazada (más agarre) y 'marbles' fuera de ella (menos) ----------
@@ -1284,7 +1306,7 @@ function scStep(R,dt){
 function crossLine(R,c){
   const t=R.t;
   if(R.liveQ){const L=R.liveQ;
-    if(c.qFly&&c.lapStart!=null){const lt=t-c.lapStart;c.lastLap=lt;c.lapTimes.push(lt);if(c.bestLap==null||lt<c.bestLap)c.bestLap=lt;c.qLaps=(c.qLaps||0)+1;if(R.fx&&c.isPlayer)R.events.push({type:'lap',car:c,time:lt});}
+    if(c.qFly&&c.lapStart!=null){const lt=t-c.lapStart;c.lastLap=lt;c.lapTimes.push(lt);if(c.bestLap==null||lt<c.bestLap){c.bestLap=lt;const tw=c.tws||[c.wear,c.wear,c.wear,c.wear];c.qBestTyre={comp:c.compound,tws:tw.slice()};} /* v50: juego de la mejor vuelta (los de la Q3 salen con el de la Q2) */c.qLaps=(c.qLaps||0)+1;if(R.fx&&c.isPlayer)R.events.push({type:'lap',car:c,time:lt});}
     const onTrack=!c.pit;c.pittedThisLap=false; /* vale cualquier vuelta empezada en pista (antes, según el garaje, se perdía una) */c.fuelAtLap=c.fuel;c.wearAtLap=c.wear;
     if(L.flag){c.qFly=false;if(!c.pit){c.qDone=true;c.pitReq=true;}}
     else{c.qFly=onTrack;c.lapStart=t;
