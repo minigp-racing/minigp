@@ -392,7 +392,7 @@ const VMAX=600, ACC=440, BRAKE=540, REV_ACC=260, REV_MAX=120;
 const STEER=3.4, STEER_LOSS=0.42, A_LAT=1250, K_LAT=16;
 const W=60, RUNOFF=230, SP=10, KMH=0.55;
 const HL=19, HW=7.5, INERTIA=(4*HL*HL+4*HW*HW)/12, CARW=2*HW; // coche a escala real: 5,6 m × 2 m (6,5 px/m)
-const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=1.1,BOTAERO=0.75,BOTLIVE=0.9,BOTLIVEW=0.82,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6,L1LANE=34,L1FADE=500,L1END=300,L1ENDT=1.6,L1K=1; // fracción de la frenada máxima que usan los bots
+const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=1.1,BOTAERO=0.75,BOTLIVE=0.9,BOTLIVEW=0.82,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6,L1LANE=34,L1FADE=500,L1END=300,L1ENDT=1.6,L1K=1,BOTFF=2,BOTFFT=0.12; // fracción de la frenada máxima que usan los bots
 const PIT_LAT=W+65, PIT_BOX=W+99, PIT_V=150, PIT_HALF=26, BOT_BRAKE=BRAKE*0.66;
 // modos de motor: ahorro / normal / ataque
 const EMODES=[{n:'Ahorro',p:0.965,heat:0.55,fuel:0.88,wear:0.5},{n:'Normal',p:1,heat:1,fuel:1,wear:1},{n:'Ataque',p:1.035,heat:1.5,fuel:1.12,wear:2.2}];
@@ -544,9 +544,9 @@ function buildTrack(ti){
   const angR=new Float64Array(N),segR=new Float64Array(N);
   for(let i=0;i<N;i++){const p=(i-1+N)%N,q=(i+1)%N;angR[i]=Math.atan2(RY[q]-RY[p],RX[q]-RX[p]);segR[i]=Math.hypot(RX[q]-RX[i],RY[q]-RY[i]);}
   const vLimS=new Float64Array(N);{const cc=BOTAERO*G*AERO/(VMAX*VMAX);const vS=new Float64Array(N);
-    const kw=new Float64Array(N),kR=new Float64Array(N);for(let i=0;i<N;i++){const a=(i-9+N)%N,b=(i+9)%N,a4=(i-4+N)%N,b4=(i+4)%N;
+    const kw=new Float64Array(N),kR=new Float64Array(N);var kRs=new Float32Array(N); /* v51: curvatura con signo de la trazada (volante con anticipación) */for(let i=0;i<N;i++){const a=(i-9+N)%N,b=(i+9)%N,a4=(i-4+N)%N,b4=(i+4)%N;
       kw[i]=Math.abs(angNorm(angR[b]-angR[a]))/Math.max(1,Math.hypot(RX[b]-RX[a],RY[b]-RY[a])); // curvatura media de la trazada (filtra ruido GPS)
-      kR[i]=Math.abs(angNorm(angR[b4]-angR[a4]))/Math.max(1,Math.hypot(RX[b4]-RX[a4],RY[b4]-RY[a4]));}
+      kR[i]=Math.abs(angNorm(angR[b4]-angR[a4]))/Math.max(1,Math.hypot(RX[b4]-RX[a4],RY[b4]-RY[a4]));kRs[i]=angNorm(angR[b4]-angR[a4])/Math.max(1,Math.hypot(RX[b4]-RX[a4],RY[b4]-RY[a4]));}
     var kRS=Float32Array.from(kw,(x,i)=>Math.max(x,kR[i]*0.8));
     for(let i=0;i<N;i++){const ak=Math.max(kw[i],kR[i]*0.6);vS[i]=ak<=cc?VMAX*1.05:Math.min(VMAX*1.05,Math.sqrt(BOTCRN*G*MECH/(ak-cc)));}
     for(let i=0;i<N;i++){let m=1e9;for(let d=-4;d<=4;d++)m=Math.min(m,vS[(i+d+N)%N]);vLimS[i]=m;}
@@ -561,7 +561,7 @@ function buildTrack(ti){
    for(let q=0;q<N;q++){const i=(q0+q)%N;if(corner[i]&&!corner[(i-1+N)%N]){
      let e=i,sgn=0,km=0;while(corner[e%N]&&e-i<N){const kk=k[e%N];if(Math.abs(kk)>km){km=Math.abs(kk);sgn=-Math.sign(kk);}e++;}
      const type=R2()<0.65?2:1;for(let j=i-6;j<e+(type===2?22:10);j++){const jj=((j%N)+N)%N;outSide[jj]=sgn;outSurf[jj]=type;}}}}
-  const tr={rl,kR:(typeof kRS!=="undefined"?kRS:null),vCorn:(typeof vCornS!=="undefined"?vCornS:null),vWet:(typeof vWetS!=="undefined"?vWetS:null),name:def.name,country:def.country,ti,N,sp,len,xs,ys,tx,ty,nx,ny,ang,k,vLim,vLimS,corner,outSide,outSurf};
+  const tr={rl,kRs:(typeof kRs!=="undefined"?kRs:null),kR:(typeof kRS!=="undefined"?kRS:null),vCorn:(typeof vCornS!=="undefined"?vCornS:null),vWet:(typeof vWetS!=="undefined"?vWetS:null),name:def.name,country:def.country,ti,N,sp,len,xs,ys,tx,ty,nx,ny,ang,k,vLim,vLimS,corner,outSide,outSurf};
   // charcos: mismos que dibuja el juego (misma semilla); se llenan cuando hay mucha agua en ese punto
   {const Rp=rng(ti*97+3),pud=[];for(let q=0;q<Math.round(N/12);q++){const i=Math.floor(Rp()*N),lat=(Rp()-0.5)*2*(W-18);const rx=14+Rp()*26,ry=8+Rp()*12;Rp();pud.push({i,lat,rx,ry,th:0.45+Rp()*0.4});}
    tr.pud=pud;tr.pudIdx=new Map();for(const p of pud){const n=Math.ceil(p.rx/sp)+1;for(let d=-n;d<=n;d++){const j=((p.i+d)%N+N)%N;if(!tr.pudIdx.has(j))tr.pudIdx.set(j,[]);tr.pudIdx.get(j).push(p);}}}
@@ -979,7 +979,11 @@ function botControl(R,c,dt){
   const diff=steerTo(c,tr,ti,tLat);
   if(R.steerMode==='sim'){ // persecución pura
     const px=tr.xs[ti]+tr.nx[ti]*tLat-c.x,py=tr.ys[ti]+tr.ny[ti]*tLat-c.y,ld=Math.max(40,Math.hypot(px,py));
-    const dd=Math.atan2(2*LWB*Math.sin(diff),ld);c.steer=clamp(dd/delMax(c,Math.abs(vf),R),-1,1);}
+    let dd=Math.atan2(2*LWB*Math.sin(diff),ld);
+    /* v51: anticipación. La persecución pura da más o menos el ángulo geométrico y solo corrige cuando el error ya ha crecido; el coche (más agarre detrás que delante) necesita además la diferencia de deriva delante-detrás para la curvatura que viene */
+    if(BOTFF>0&&tr.kRs&&Math.abs(vf)>V_DYN){const v=Math.abs(vf),p0=c.idx+Math.round(v*BOTFFT/tr.sp);let ks=0;for(let j=0;j<5;j++)ks+=tr.kRs[(p0+j)%N];ks/=5;
+      const mu=gripLat(c,v,R),a=v*v*ks*0.5,h=0.97,af=Math.atanh(clamp(a/(mu*0.45),-h,h))/CS,ar=Math.atanh(clamp(a/(mu*0.55),-h,h))/CS;dd+=BOTFF*(af-ar);}
+    c.steer=clamp(dd/delMax(c,Math.abs(vf),R),-1,1);}
   if(R.t>2&&Math.abs(vf)<20&&c.fuel>0){c.stuckT+=dt;if(c.stuckT>1.2){c.stuckT=0;c.recover=1.0;c.recSteer=Math.sign(diff)||1;c.recN=(c.recN||0)+1;
     // comisarios: tras varios intentos fallidos devuelven el coche a pista (pierde tiempo)
     if(c.recN>=(c.surf==="gravel"?1:c.off?2:4)){c.recN=0;const j=c.idx,sg=Math.sign(c.lat)||1;c.x=tr.xs[j]+tr.nx[j]*sg*(W-20);c.y=tr.ys[j]+tr.ny[j]*sg*(W-20);c.a=tr.ang[j];c.vx=0;c.vy=0;c.r=0;c.recover=2.5;c.recSteer=0;if(R.fx)R.events.push({type:'marshal',car:c});}}}
