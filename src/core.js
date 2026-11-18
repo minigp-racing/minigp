@@ -108,16 +108,19 @@ function crPoint(p0,p1,p2,p3,t){
 
 function minDist(tr,x,y,step){let m=1e18;for(let i=0;i<tr.N;i+=step){const dx=x-tr.xs[i],dy=y-tr.ys[i];const q=dx*dx+dy*dy;if(q<m)m=q;}return Math.sqrt(m);}
 function dOf(tr,i){return i>tr.N/2?i-tr.N:i}
+/* v49: el pit lane mide lo que permita cada circuito (tr.pitL, media longitud del tramo recto en puntos de pista, 60-100; antes 50 en todos)
+   y tiene 11 garajes, uno por escudería, con los dos coches del equipo dentro. PITL se fija al usar el circuito (usePit). */
+let PITL=50;const PITE=50,NGAR=11;function usePit(tr){PITL=(tr&&tr.pitL)||60;}
 function lpPit(d){
   const a=W-30;
-  if(d<=-100||d>=100)return a;
-  if(d<-50)return a+(PIT_LAT-a)*smooth((d+100)/50);   // entrada y salida largas
-  if(d>50)return PIT_LAT+(a-PIT_LAT)*smooth((d-50)/50);
+  if(d<=-(PITL+PITE)||d>=PITL+PITE)return a;
+  if(d<-PITL)return a+(PIT_LAT-a)*smooth((d+PITL+PITE)/PITE);   // entrada y salida largas
+  if(d>PITL)return PIT_LAT+(a-PIT_LAT)*smooth((d-PITL)/PITE);
   return PIT_LAT;
 }
-let BOX_STEP=5.4;function boxD(slot){return -40+slot*BOX_STEP} // con parrilla llena los boxes se juntan para caber en el pit lane
+function boxD(slot){const gw=(2*PITL-14)/NGAR;return -PITL+7+Math.floor(slot/2)*gw+(slot%2?0.73:0.27)*gw;}
 // muro que separa el pit lane de la pista (null donde el carril aún va pegado a la pista)
-function pitWallLat(d){if(d<-100||d>100)return null;if(d>=-50&&d<=50)return W+30;const inner=lpPit(d)-PIT_HALF;return inner>W+KERB+10?(W+KERB+2+inner)/2:null;}
+function pitWallLat(d){if(d<-(PITL+PITE)||d>PITL+PITE)return null;if(d>=-PITL&&d<=PITL)return W+30;const inner=lpPit(d)-PIT_HALF;return inner>W+KERB+10?(W+KERB+2+inner)/2:null;}
 
 const TRACK_CACHE={};
 /* v45: la foto aérea de Montmeló es opcional (Ajustes); por defecto el circuito se dibuja como los demás, nítido a cualquier zoom */
@@ -179,6 +182,10 @@ function buildTrack(ti){
   let best=-1,side=1;
   for(const s of [1,-1]){let m=1e9;for(const d of [-60,0,60]){const i=(d+N)%N;m=Math.min(m,minDist(tr,xs[i]+nx[i]*s*(RUNOFF+260),ys[i]+ny[i]*s*(RUNOFF+260),2));}if(m>best){best=m;side=s;}}
   tr.pitSide=def.pitSide||side;
+  {const s=tr.pitSide,clear=(d,lat)=>{const i=((d%N)+N)%N,x=xs[i]+nx[i]*s*lat,y=ys[i]+ny[i]*s*lat;let m=1e9;
+      for(let j=0;j<N;j+=2){const dj=Math.min(Math.abs(j-i),N-Math.abs(j-i));if(dj<lat/sp+25)continue;const q=Math.hypot(x-xs[j],y-ys[j]);if(q<m)m=q;}return m;};
+    let best=60;for(const L of [70,80,90,100]){let ok=true;for(let d=-(L+50);d<=L+50&&ok;d+=3){const lat=Math.abs(d)<=L?RUNOFF+62:PIT_BOX+20,ii=((d%N)+N)%N;if(clear(d,lat)<W+40||Math.abs(k[ii])*lat>0.5||(Math.abs(d)<=L&&corner[ii]))ok=false;}if(ok)best=L;else break;}
+    tr.pitL=def.pitL||best;}
   if(def.photo&&USE_PHOTO){const ph=def.photo,mx=111320*Math.cos(ph.latm*Math.PI/180),PPM=6.5;
     const rect=t=>({src:t.src,x0:(t.lon[0]-ph.lon0)*mx*PPM,x1:(t.lon[1]-ph.lon0)*mx*PPM,y0:-(t.lat[1]-ph.lat0)*111320*PPM,y1:-(t.lat[0]-ph.lat0)*111320*PPM});
     tr.photo={credit:ph.credit,low:[rect(ph.low)],hi:(ph.hi||[]).map(rect)};}
@@ -311,7 +318,7 @@ function locate(tr,c){
   for(let d=-40;d<=40;d++){const i=(c.idx+d+tr.N)%tr.N;const dx=c.x-tr.xs[i],dy=c.y-tr.ys[i];const q=dx*dx+dy*dy;if(q<best){best=q;bi=i;}}
   c.idx=bi;c.lat=(c.x-tr.xs[bi])*tr.nx[bi]+(c.y-tr.ys[bi])*tr.ny[bi];
 }
-function onPitLane(tr,c){const d=dOf(tr,c.idx);if(d<-102||d>102)return false;const sl=c.lat*tr.pitSide;if(d>=-52&&d<=52)return sl>W-5&&sl<PIT_BOX+24;return Math.abs(sl-lpPit(d))<PIT_HALF+4;}
+function onPitLane(tr,c){const d=dOf(tr,c.idx);if(d<-(PITL+PITE+2)||d>PITL+PITE+2)return false;const sl=c.lat*tr.pitSide;if(d>=-(PITL+2)&&d<=PITL+2)return sl>W-5&&sl<PIT_BOX+24;return Math.abs(sl-lpPit(d))<PIT_HALF+4;}
 
 const DIFF={facil:[0.84,0.93],normal:[0.91,0.985],dificil:[0.96,1.035],experto:[1.0,1.06]};
 
@@ -425,7 +432,7 @@ function makeSession(cfg){
     });
     if(R.sets){const p=cars.find(c=>c.isPlayer&&!c.bot);if(p)p.wear=takeSet(R,p);}
   }
-  BOX_STEP=cars.length>16?4.3:5.4;
+  usePit(tr);
   R.player=cars.find(c=>c.isPlayer)||cars[0];
   /* v45: clasificación en directo: todos los coches empiezan en su garaje; el jugador decide cuándo salir;
      los bots salen según un plan (unos pronto, otros con la pista más engomada) y ruedan hasta la bandera a cuadros */
@@ -547,7 +554,7 @@ function botControl(R,c,dt){
   // me han adelantado con amarilla o safety car y me devuelven el puesto: salgo de su estela por el otro lado y le paso
   const rc=c.reclaim&&R.t<c.reclaim.until?R.cars.find(o=>o.id===c.reclaim.id):null;
   if(rc&&rc.prog>=c.prog-2&&rc.prog-c.prog<40)off=rc.lat>0?-(W-26):(W-26);
-  else if(c.pitReq&&dOf(tr,c.idx)>-200&&dOf(tr,c.idx)<-60)off=tr.pitSide*(W-20);
+  else if(c.pitReq&&dOf(tr,c.idx)>-(PITL+150)&&dOf(tr,c.idx)<-(PITL+10))off=tr.pitSide*(W-20);
   else{
     for(const o of R.cars){
       if(o===c||o.pit)continue;const d=o.prog-c.prog,dead=o.dnf||o.engineDead;
@@ -684,23 +691,34 @@ function pitControl(R,c,dt){
   if(c.pit==='out'||c.pit==='in'){const sp=Math.hypot(c.vx,c.vy);c.pitStuck=sp<25?(c.pitStuck||0)+dt:0;
     if(c.pitStuck>3||(c.pit==='out'&&d<bd-25)){const i=c.idx,l=tr.pitSide*(c.pit==='out'&&d<bd+4?PIT_BOX:lpPit(d));c.x=tr.xs[i]+tr.nx[i]*l;c.y=tr.ys[i]+tr.ny[i]*l;c.a=tr.ang[i];c.vx=Math.cos(c.a)*PIT_V*0.6;c.vy=Math.sin(c.a)*PIT_V*0.6;c.r=0;c.av=0;c.pitStuck=0;
       if(c.pit==='out'&&d<bd-25){const j=((tr.pitOut==null?0:0)+Math.round(bd+6)%N+N)%N;const l2=tr.pitSide*PIT_BOX;c.x=tr.xs[j]+tr.nx[j]*l2;c.y=tr.ys[j]+tr.ny[j]*l2;c.a=tr.ang[j];}}}
+  /* v49: el jugador conduce por el pit lane; limitador (a partir de la línea) y parada en su box automáticos */
+  if(!c.bot){playerControl(R,c,dt);let cap=d>=-PITL-1&&d<=PITL+1?PIT_V:1e9;
+    if(c.pit==='in'){const rem=(bd-d)*tr.sp;if(d>=-PITL-5&&rem<260)cap=Math.min(cap,Math.max(18,Math.sqrt(Math.max(0,2*420*(rem-6)))));
+      if(rem<70&&rem>-15){const ti2=(c.idx+4)%N;steerTo(c,tr,ti2,tr.pitSide*PIT_BOX);}
+      if((rem<9&&Math.abs(vf)<35)||rem<-15)startService(R,c,vf);}
+    else if(d>PITL+PITE+2){c.pit=null;c.pitReq=false;}
+    if(vf>cap){c.throttle=0;c.brake=Math.max(c.brake||0,clamp((vf-cap)/30,0.25,1));}else if(cap<1e8&&vf>cap*0.97)c.throttle=Math.min(c.throttle,0.3);
+    const sl=c.lat*tr.pitSide;if(Math.abs(d)<=PITL&&sl>PIT_BOX+22){const push=(PIT_BOX+22-sl)*tr.pitSide;c.x+=tr.nx[c.idx]*push;c.y+=tr.ny[c.idx]*push;c.lat+=push;const vn=c.vx*tr.nx[c.idx]+c.vy*tr.ny[c.idx];if(vn*tr.pitSide>0){c.vx-=vn*tr.nx[c.idx];c.vy-=vn*tr.ny[c.idx];}}
+    return;}
   let tl=lpPit(dti);
   if(c.pit==='in'&&bd-d<14)tl=PIT_BOX;
   if(c.pit==='out'&&d<bd+4)tl=PIT_BOX;
   steerTo(c,tr,ti,tr.pitSide*tl);
   let target;
   if(c.pit==='in'){
-    target=d<-50?Math.sqrt(PIT_V*PIT_V+2*700*Math.max(0,(-50-d)*tr.sp)):PIT_V;
+    target=d<-PITL?Math.sqrt(PIT_V*PIT_V+2*700*Math.max(0,(-PITL-d)*tr.sp)):PIT_V;
     const rem=(bd-d)*tr.sp;
-    if(d>=-55)target=Math.min(target,Math.sqrt(Math.max(0,2*450*(rem-4))));
-    if((rem<9&&Math.abs(vf)<30)||rem<-15){c.pit='service';c.rainCall=false;if(c.bot&&R.mode==='race'){const k=compoundFor(R,c,c.nextCompound);if(!(c.rainCall&&k===c.compound))c.nextCompound=k;} /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
-      if(R.liveQ){c.fuelAdd=0;c.pitReq=false;c.qFly=false;const L=R.liveQ,nx=c.qRuns?c.qRuns[++c.qRun]:null;c.pitT=(!c.bot||L.flag||c.qDone||nx==null)?1e9:Math.max(3,nx-L.t);c.pitTotal=c.pitT;}
-      if(R.fx)R.events.push({type:'pitstop',car:c});}
+    if(d>=-PITL-5)target=Math.min(target,Math.sqrt(Math.max(0,2*450*(rem-4))));
+    if((rem<9&&Math.abs(vf)<30)||rem<-15)startService(R,c,vf);
   }else{
-    target=d<50?PIT_V:9999;
-    if(d>102){c.pit=null;c.pitReq=false;}
+    target=d<PITL?PIT_V:9999;
+    if(d>PITL+PITE+2){c.pit=null;c.pitReq=false;}
   }
   speedCtl(c,vf,target);
+}
+function startService(R,c,vf){{c.pit='service';c.rainCall=false;if(c.bot&&R.mode==='race'){const k=compoundFor(R,c,c.nextCompound);if(!(c.rainCall&&k===c.compound))c.nextCompound=k;} /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
+      if(R.liveQ){c.fuelAdd=0;c.pitReq=false;c.qFly=false;const L=R.liveQ,nx=c.qRuns?c.qRuns[++c.qRun]:null;c.pitT=(!c.bot||L.flag||c.qDone||nx==null)?1e9:Math.max(3,nx-L.t);c.pitTotal=c.pitT;}
+      if(R.fx)R.events.push({type:'pitstop',car:c});}
 }
 
 function physics(R,c,dt){
@@ -818,13 +836,14 @@ function physicsSim(R,c,dt){
     else FxR=Math.max(tcCap,0);}
   if(pl)c.spinW=(c.spinW||0)+(spinT-(c.spinW||0))*Math.min(1,(spinT>(c.spinW||0)?14:6)*dt);
   // frenada que supera el agarre: bloqueo
-  let lock=0;if(-FxF>muF*0.98){lock=1;FxF=-muF*0.95;}if(-FxR>muR*0.98){lock=1;FxR=Math.max(FxR,-muR*0.95);}
+  /* v49: con ayudas el jugador lleva ABS: la frenada se queda en el límite sin bloquear (ni marcas ni plano) */
+  const absP=pl&&R.aids;let lock=0;if(-FxF>muF*0.98){lock=absP?0:1;FxF=-muF*0.95;}if(-FxR>muR*0.98){lock=absP?0:1;FxR=Math.max(FxR,-muR*0.95);}
   // jugador: si mantiene el freno a fondo cuando ya ha bajado la velocidad (menos carga aerodinámica), bloquea.
   // Hay que soltar un poco al final de la frenada. Con ayudas bloquea más tarde y más suave.
   if(c.isPlayer&&!c.bot){
     c.brakeHold=c.brake>0.92&&vf>20?(c.brakeHold||0)+dt:0;
     const lockV=(R.aids?160:260)*(0.8+0.4*(c.brakeS==null?0.5:c.brakeS))*(c.bT>950?1+Math.min(0.35,(c.bT-950)/400):c.bT<220?1.2:1); // v45: frenos calientes o fríos: bloquea antes // ~90 / ~145 km/h; más freno en el reglaje: bloquea antes
-    if(c.brakeHold>0.45&&v<lockV){c.lockUp=true;}else if(c.brake<0.75||vf<15)c.lockUp=false;
+    if(c.brakeHold>0.45&&v<lockV&&!R.aids){c.lockUp=true;}else if(c.brake<0.75||vf<15)c.lockUp=false;
     if(c.lockUp){lock=1;const k=R.aids?0.85:0.72;FxF=-muF*k;FxR=Math.max(FxR,-muR*k);c.lockF=R.aids?0.45:0.2;
       if(R.mult)c.wear=Math.min(1,c.wear+0.004*R.mult*dt);}else c.lockF=0;
   }
@@ -841,9 +860,12 @@ function physicsSim(R,c,dt){
     const rt=vf*Math.tan(del)/LWB;c.r+=(rt-c.r)*Math.min(1,12*dt);vl*=Math.exp(-10*dt);
     vf+=ax*dt;
   }else{
-    const af=Math.atan2(vl+LA*c.r,v)-del,ar=Math.atan2(vl-LB*c.r,v);
+    /* v49 (solo jugador): la deriva de las delanteras no pasa de ~8° con ayudas (~10° sin): a partir de ahí la goma ya no gira más, solo arrastra.
+       Con teclado (todo o nada) el volante a fondo las llevaba a ~18°: marcas, humo y calor al girar después de frenar. */
+    const bF=Math.atan2(vl+LA*c.r,v),dE=pl&&paved(c.surf)?clamp(del,bF-(R.aids?2.4:3.0)/CSf,bF+(R.aids?2.4:3.0)/CSf):del;
+    const af=bF-dE,ar=Math.atan2(vl-LB*c.r,v);
     const Ff=-latF*Math.tanh(CSf*af),Fr=-latR*Math.tanh(CS*ar);
-    let dr=(LA*Ff*Math.cos(del)-LB*Fr)/IZ;
+    let dr=(LA*Ff*Math.cos(dE)-LB*Fr)/IZ;
     // v44: para el jugador, el giro de referencia se limita a lo que permite el agarre (si no, con mucho volante la ayuda empujaba a trompear)
     const rCap=mu*1.12/Math.max(v,V_DYN),rKin=vf*Math.tan(del)/LWB,rGrip=paved(c.surf)?clamp(rKin,-rCap,rCap):rKin;
     // v44 (solo jugador): estabilidad. Si la trasera empieza a irse, el coche ayuda un poco a recogerlo (sin ayudas, menos);
@@ -855,7 +877,7 @@ function physicsSim(R,c,dt){
     if((c.bot||R.aids)&&!(c.noESC>R.t)){const rRef=pl?rGrip:rKin;
       if(Math.abs(ar)>0.10){dr-=(c.r-rRef)*5;ax-=Math.max(0,FxR)*0.6;}}
     // integramos en ejes del mundo: el giro del coche ya rota la velocidad, sin término de Coriolis explícito
-    const dvl=Ff*Math.cos(del)+Fr;
+    const dvl=Ff*Math.cos(dE)+Fr;
     vf+=ax*dt;vl+=dvl*dt;c.r+=dr*dt;
     slide=Math.max(Math.abs(ar),Math.abs(af));
   }
@@ -1256,7 +1278,7 @@ function scStep(R,dt){
   const j=Math.floor(sc.s)%N,f=sc.s-Math.floor(sc.s),j2=(j+1)%N;
   sc.x=tr.xs[j]+(tr.xs[j2]-tr.xs[j])*f;sc.y=tr.ys[j]+(tr.ys[j2]-tr.ys[j])*f;sc.a=tr.ang[j];
   // entra a boxes al final de la vuelta en que se retira
-  if(sc.phase==='in'){const d=dOf(tr,j);if(d>-110&&d<-60){sc.phase='gone';sc.endLap=lead.lap;if(R.fx)R.events.push({type:'sc_pit'});}}
+  if(sc.phase==='in'){const d=dOf(tr,j);if(d>-(PITL+60)&&d<-(PITL+10)){sc.phase='gone';sc.endLap=lead.lap;if(R.fx)R.events.push({type:'sc_pit'});}}
 }
 
 function crossLine(R,c){
@@ -1396,7 +1418,11 @@ function stepRace(R,dt){
       c.vx*=0.92;c.vy*=0.92;
     }
     // inicio de la entrada a boxes
-    if((R.mode==='race'||R.liveQ)&&c.pitReq&&!c.pit&&!c.finished){const d=dOf(tr,c.idx);if(d>=-150&&d<=-112){c.pit='in';c.qFly=false;}}
+    if((R.mode==='race'||R.liveQ)&&c.pitReq&&!c.pit&&!c.finished&&c.bot){const d=dOf(tr,c.idx);if(d>=-(PITL+100)&&d<=-(PITL+62)){c.pit='in';c.qFly=false;}}
+    /* v49: el jugador entra a boxes conduciendo: al meterse en el carril del pit lane pasa a «en boxes» (aunque no hubiera pedido BOX) */
+    if((R.mode==='race'||R.liveQ)&&!c.bot&&!c.pit&&!c.finished&&!c.dnf){const d=dOf(tr,c.idx);if(d>=-(PITL+PITE)&&d<-PITL+8&&c.lat*tr.pitSide>W+12&&onPitLane(tr,c)){c.pit='in';c.qFly=false;if(!c.pitReq){c.pitReq=true;if(R.fx)R.events.push({type:'pitenter',car:c});}}
+      else if(c.pitReq&&d>=-PITL+8&&d<0&&!c.pitMiss){c.pitMiss=true;if(R.fx)R.events.push({type:'pitmiss',car:c});}
+      if(d>0)c.pitMiss=false;}
     engineStep(R,c,dt);
     if(c.failAt!=null&&!c.engineDead&&!c.finished&&R.t>c.failAt&&c.isPlayer&&!c.bot){c.failAt=null; // al jugador se le avisa: puede salvarla
       c.issue=c.failType==='brakes'?'brakes':'oil';if(R.fx)R.events.push({type:'radioIssue',car:c,kind:c.issue});}

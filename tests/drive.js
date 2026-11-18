@@ -14,7 +14,7 @@ for(const ti of tracks){
   while(R.t<400&&tl.length<2){
     const fx=Math.cos(c.a),fy=Math.sin(c.a),vf=c.vx*fx+c.vy*fy,vl=-c.vx*fy+c.vy*fx;
     const la=Math.round(8+Math.abs(vf)*0.032),ti2=(c.idx+la)%N;
-    const px=tr.xs[ti2]-c.x,py=tr.ys[ti2]-c.y,diff=A.angNorm(Math.atan2(py,px)-c.a),ld=Math.max(40,Math.hypot(px,py));
+    const rl=tr.rl?tr.rl[ti2]:0,px=tr.xs[ti2]+tr.nx[ti2]*rl-c.x,py=tr.ys[ti2]+tr.ny[ti2]*rl-c.y, /* v49: sigue la trazada (la velocidad objetivo sale de ella) */diff=A.angNorm(Math.atan2(py,px)-c.a),ld=Math.max(40,Math.hypot(px,py));
     const want=Math.atan2(2*A.LWB*Math.sin(diff),ld)/A.delMax(c,Math.abs(vf),R);
     let tgt=1e9;for(let k=2;k<60;k+=3)tgt=Math.min(tgt,tr.vLimS[(c.idx+k)%N]*SPD+k*tr.sp*1.2);
     q.push({t:R.t,right:want>c.steer+0.1?1:0,left:want<c.steer-0.1?1:0,up:vf<tgt?1:0,down:vf>tgt+12?1:0});

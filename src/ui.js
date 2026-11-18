@@ -170,20 +170,20 @@ const particles=[];
 const GFX={};
 function gfxFor(tr){
   if(GFX[tr.ti])return GFX[tr.ti];
-  const N=tr.N,s=tr.pitSide,P=(d,lat)=>{const i=((Math.round(d)%N)+N)%N;return [tr.xs[i]+tr.nx[i]*lat,tr.ys[i]+tr.ny[i]*lat];};
+  usePit(tr);const N=tr.N,s=tr.pitSide,P=(d,lat)=>{const i=((Math.round(d)%N)+N)%N;return [tr.xs[i]+tr.nx[i]*lat,tr.ys[i]+tr.ny[i]*lat];};
   const path=new Path2D();path.moveTo(tr.xs[0],tr.ys[0]);for(let i=1;i<N;i++)path.lineTo(tr.xs[i],tr.ys[i]);path.closePath();
   const kerb=new Path2D();let s0=0;while(s0<N&&tr.corner[s0])s0++;let open=false;
   for(let q=0;q<=N;q++){const i=(s0+q)%N;if(tr.corner[i]){if(!open){kerb.moveTo(tr.xs[i],tr.ys[i]);open=true;}else kerb.lineTo(tr.xs[i],tr.ys[i]);}else open=false;}
   const line=(d0,d1,latf)=>{const p=new Path2D();for(let d=d0;d<=d1;d++){const q=P(d,latf(d));d===d0?p.moveTo(q[0],q[1]):p.lineTo(q[0],q[1]);}return p;};
   const poly=(d0,d1,l0,l1)=>{const p=new Path2D();for(let d=d0;d<=d1;d+=0.5){const q=P(d,l0);d===d0?p.moveTo(q[0],q[1]):p.lineTo(q[0],q[1]);}for(let d=d1;d>=d0;d-=0.5){const q=P(d,l1);p.lineTo(q[0],q[1]);}p.closePath();return p;};
-  const fast=line(-102,102,d=>s*lpPit(d));
-  const boxLane=line(-52,52,()=>s*PIT_BOX);
-  const wall=new Path2D();{let on=false;for(let d=-100;d<=100;d++){const wl=pitWallLat(d);if(wl==null){on=false;continue;}const q=P(d,s*wl);on?wall.lineTo(q[0],q[1]):wall.moveTo(q[0],q[1]);on=true;}}
-  const garage=poly(-54,54,s*(RUNOFF+8),s*(RUNOFF+80));
-  const garageRoof=poly(-54,54,s*(RUNOFF+44),s*(RUNOFF+80));
+  const fast=line(-(PITL+PITE+2),PITL+PITE+2,d=>s*lpPit(d));
+  const boxLane=line(-(PITL+2),PITL+2,()=>s*PIT_BOX);
+  const wall=new Path2D();{let on=false;for(let d=-(PITL+PITE);d<=PITL+PITE;d++){const wl=pitWallLat(d);if(wl==null){on=false;continue;}const q=P(d,s*wl);on?wall.lineTo(q[0],q[1]):wall.moveTo(q[0],q[1]);on=true;}}
+  const garage=poly(-(PITL+4),PITL+4,s*(RUNOFF+8),s*(RUNOFF+80));
+  const garageRoof=poly(-(PITL+4),PITL+4,s*(RUNOFF+44),s*(RUNOFF+80));
   const doors=[],boxes=[],tnames=[];
-  for(let k=0;k<8;k++){doors.push(poly(boxD(k*2)-2.6,boxD(k*2+1)+2.6,s*(RUNOFF+8),s*(RUNOFF+26)));const m=P((boxD(k*2)+boxD(k*2+1))/2,s*(RUNOFF+62));tnames.push({x:m[0],y:m[1]});}
-  for(let k=0;k<16;k++)boxes.push(poly(boxD(k)-2.4,boxD(k)+2.4,s*(PIT_BOX-17),s*(PIT_BOX+17)));
+  for(let k=0;k<NGAR;k++){doors.push(poly(boxD(k*2)-2.6,boxD(k*2+1)+2.6,s*(RUNOFF+8),s*(RUNOFF+26)));const m=P((boxD(k*2)+boxD(k*2+1))/2,s*(RUNOFF+62));tnames.push({x:m[0],y:m[1]});}
+  for(let k=0;k<2*NGAR;k++)boxes.push(poly(boxD(k)-2.4,boxD(k)+2.4,s*(PIT_BOX-17),s*(PIT_BOX+17)));
   let stands=null,standsRoof=null;
   if(tr.stands){stands=poly(-56,56,-s*(RUNOFF+28),-s*(RUNOFF+110));standsRoof=poly(-56,56,-s*(RUNOFF+96),-s*(RUNOFF+116));}
   const tyres=new Path2D();{let open=false;for(let i=0;i<N;i++){const on=tr.corner[i]&&Math.abs(tr.k[i])>1/1600;if(on){const sg=-Math.sign(tr.k[i]),lat=sg*(RUNOFF-2),x=tr.xs[i]+tr.nx[i]*lat,y=tr.ys[i]+tr.ny[i]*lat;
@@ -1159,11 +1159,11 @@ function garageUpdate(){
     +'<div class="gb"><button class="go" id="gOut"'+(L.flag?' disabled':'')+'>▶ Salir a pista</button><button class="btn2" id="gFast">'+(['⏩ Tiempo ×4','⏩⏩ ×8','⏸ Tiempo normal'][ui.qFast||0])+'</button></div></div>'+tbl+'</div>';
 }
 function requestBox(){
-  if(R&&R.liveQ&&!paused&&!attract){const p=R.player;if(p.pit||p.dnf)return;p.pitReq=!p.pitReq;flash(p.pitReq?'Vuelves al garaje':'Sigues en pista',p.pitReq?'Entras en boxes al pasar por meta':'',1.3);return;}
+  if(R&&R.liveQ&&!paused&&!attract){const p=R.player;if(p.pit||p.dnf)return;p.pitReq=!p.pitReq;flash(p.pitReq?'Vuelves al garaje':'Sigues en pista',p.pitReq?'Métete por la entrada del pit lane antes de meta':'',1.3);return;}
   if(!R||attract||R.mode!=='race'||paused)return;const p=R.player;
   if(p.finished||p.dnf||p.pit)return;
   if(!R.replay){openPitMenu();return;}
-  p.pitReq=!p.pitReq;flash(p.pitReq?'BOX, BOX':'Box cancelado',p.pitReq?'Entras al final de esta vuelta':'',1.4);
+  p.pitReq=!p.pitReq;flash(p.pitReq?'BOX, BOX':'Box cancelado',p.pitReq?'Métete por la entrada del pit lane antes de meta':'',1.4);
   radioSay(p.pitReq?'Box, box. Confirmado, preparamos '+COMPOUNDS[p.nextCompound].name.toLowerCase()+'.':'Recibido, seguimos fuera.','box',3,true);
 }
 function setCompound(k){if(!R||attract||R.mode!=='race')return;const p=R.player;if(p.pit==='service')return;p.nextCompound=k;const left=R.sets?R.sets[k]:null;flash('Neumático: '+COMPOUNDS[k].name,left==null?'':left>0?left+' juego(s) nuevo(s)':'Sin juegos nuevos: irá uno usado',1.4);
@@ -1350,6 +1350,8 @@ function fxFrame(dt){
     else if(ev.type==='sc_pen'&&!attract){flash('Penalización','Has adelantado a '+ev.who+' con safety car',2.4);radioSay('Nos han penalizado por adelantar con el safety car. Devuelve la posición la próxima vez.',null,0,true);}
     else if(ev.car&&ev.car.isPlayer&&!attract){
       if(ev.type==='lap'){if(ghostLapDone(ev.time)&&R.mode==='quali')radioSay('Nueva mejor vuelta. El fantasma se actualiza.','gh',10);radioLap(ev.car);const rec=ui.record==null||ev.time<ui.record;flash(fmt(ev.time),rec?'¡Récord del circuito!':'Vuelta '+(ev.car.lap-1),2);}
+      if(ev.type==='pitenter'){flash('Pit lane','Limitador automático · tu box se marca en amarillo',1.8);radioSay('Entras en boxes. Preparamos '+COMPOUNDS[ev.car.nextCompound].name.toLowerCase()+'.','pin',5,true);}
+      if(ev.type==='pitmiss'){flash('Te has pasado la entrada','Seguimos fuera · BOX sigue pedido para la próxima vuelta',2);radioSay('Te has pasado la entrada a boxes. Lo intentamos la próxima vuelta.','pmiss',5,true);}
       if(ev.type==='pitstop'){radioSay('Parada limpia. '+COMPOUNDS[ev.car.nextCompound].name+(ev.car.fuelAdd>1?' y '+Math.round(ev.car.fuelAdd)+' litros':'')+'. Ruedas frías al salir.','pit',20);}
       if(ev.type==='pitstop')flash('Parada en boxes',`${COMPOUNDS[ev.car.nextCompound].name} · +${Math.round(ev.car.fuelAdd)} L`,1.6);
       if(ev.type==='pitdone')flash('¡Vamos, vamos!','',1);
@@ -1639,7 +1641,7 @@ function drawReplayBanner(){
 }
 
 // ---------- estrategia en la pausa: ¿qué pasa si paro ahora? ----------
-function pitLossEst(){const tr=R.tr,len=190*tr.sp,avg=Math.max(250,tr.len/Math.max(30,(R.player.lastLap||R.est.lap||100)));
+function pitLossEst(){const tr=R.tr,len=(2*PITL+2*PITE-10)*tr.sp,avg=Math.max(250,tr.len/Math.max(30,(R.player.lastLap||R.est.lap||100)));
   const p=R.player,fpl=fplOf(R,p),fuelAdd=clamp(lapsLeft(R,p)*fpl*1.08+2-p.fuel,0,TANK-p.fuel);
   return {loss:len/PIT_V-len/avg+2.2+2.4+fuelAdd*0.06+2,fuelAdd};}
 function strategyHtml(){
@@ -2074,12 +2076,12 @@ function drawStatic(ctx,G,tr,bx0,by0,bx1,by1){ // capa estática del circuito (s
   ctx.strokeStyle='#f2f2f2';ctx.lineWidth=58;ctx.stroke(G.fast);ctx.lineWidth=44;ctx.stroke(G.boxLane);
   ctx.strokeStyle=PAT.asphalt;ctx.lineWidth=52;ctx.stroke(G.fast);ctx.strokeStyle=PAT.pitbox;ctx.lineWidth=40;ctx.stroke(G.boxLane);
   const teamsOn={};for(const c of R.cars)teamsOn[c.team]=c;
-  for(let k=0;k<16;k++){const t=teamsOn[k>>1];if(!t)continue;ctx.fillStyle=k===R.player.slot&&!attract?'rgba(255,210,63,.45)':t.color+'40';ctx.fill(G.boxes[k]);}
+  for(let k=0;k<2*NGAR;k++){const t=teamsOn[k>>1];if(!t)continue;ctx.fillStyle=k===R.player.slot&&!attract?'rgba(255,210,63,.45)':t.color+'40';ctx.fill(G.boxes[k]);}
   {const SV=sunVec();ctx.fillStyle='rgba(0,0,0,.25)';ctx.save();ctx.translate(SV.x*6,SV.y*6);ctx.fill(G.garage);ctx.restore();}
   ctx.fillStyle='#3b4049';ctx.fill(G.garage);ctx.fillStyle='#4a505b';ctx.fill(G.garageRoof);
-  for(let k=0;k<8;k++){const t=teamsOn[k];ctx.fillStyle=t?t.color:'#2c3038';ctx.fill(G.doors[k]);}
+  for(let k=0;k<NGAR;k++){const t=teamsOn[k];ctx.fillStyle=t?t.color:'#2c3038';ctx.fill(G.doors[k]);}
   {ctx.font='bold 13px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    for(let k=0;k<8;k++){const t=teamsOn[k];if(!t||!t.teamName)continue;const m=G.tnames[k];ctx.save();ctx.translate(m.x,m.y);ctx.rotate(tr.ang[0]);{const li=logoImg(t);if(li)ctx.drawImage(li,-75,-11,22,22);}ctx.fillStyle='rgba(255,255,255,.75)';const nm=t.teamName.slice(0,22),tw=ctx.measureText(nm).width;if(tw>96)ctx.scale(96/tw,96/tw);ctx.fillText(nm,0,0);ctx.restore();}}
+    for(let k=0;k<NGAR;k++){const t=teamsOn[k];if(!t||!t.teamName)continue;const m=G.tnames[k];ctx.save();ctx.translate(m.x,m.y);ctx.rotate(tr.ang[0]);{const li=logoImg(t);if(li)ctx.drawImage(li,-75,-11,22,22);}ctx.fillStyle='rgba(255,255,255,.75)';const nm=t.teamName.slice(0,22),tw=ctx.measureText(nm).width;if(tw>96)ctx.scale(96/tw,96/tw);ctx.fillText(nm,0,0);ctx.restore();}}
   if(G.stands&&!ph){const SV=sunVec();ctx.fillStyle='rgba(0,0,0,.25)';ctx.save();ctx.translate(SV.x*7,SV.y*7);ctx.fill(G.stands);ctx.restore();ctx.fillStyle=PAT.crowd;ctx.fill(G.stands);ctx.fillStyle='#d9dde3';ctx.fill(G.standsRoof);}
   }
   // pianos: blanco y rojo en el mismo trazo (sin discontinuidades entre trozos)
@@ -2891,6 +2893,10 @@ function updateHud(dt){
       // v45: en el móvil, vuelta actual y delta en la barra de arriba (el panel de tiempos del PC no cabe)
       if(COMPACT){$('lcur').textContent=$('tcur').textContent;const ld=$('ldelta');ld.textContent=el.textContent;ld.style.background=el.style.background;ld.style.color=el.style.color;}}
     $('board').innerHTML=boardHtml();
+    /* v49: con BOX pedido, aviso de por qué lado está la entrada del pit lane (ahora entras tú conduciendo) */
+    if((R.mode==='race'||R.liveQ)&&p.pitReq&&!p.pit&&!p.bot&&!p.finished){const d=dOf(R.tr,p.idx);
+      if(d>-(PITL+230)&&d<-(PITL+60)&&ui.pitHintLap!==p.lap){ui.pitHintLap=p.lap;const i=p.idx,rt=(R.tr.nx[i]*-Math.sin(p.a)+R.tr.ny[i]*Math.cos(p.a))*R.tr.pitSide>0;
+        flash('Entrada a boxes '+(rt?'a la derecha ➜':'⬅ a la izquierda'),'Sal de la pista por el carril del pit lane',2.2);}}
     const C=COMPOUNDS[p.compound],life=Math.round((1-p.wear)*100);
     const ico=$('tyico');ico.textContent=tyL(p.compound);ico.style.borderColor=C.color;ico.style.color=C.color;
     $('tyname').textContent=C.name;$('typct').textContent=life+'%';
