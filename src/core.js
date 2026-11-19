@@ -299,11 +299,14 @@ function wxPlan(R){const Wt=R.weather;if(R.wxP&&Math.abs(R.wxP.t-Wt.t)<4)return 
   return R.wxP={t:Wt.t,st,a};}
 function wxAt(P,t){const i=Math.max(0,Math.round(t/P.st));return P.a[Math.min(i,P.a.length-1)];}
 function wxRisk(c){const T=c.traits||{},st=T.style;if(c.wxRisk==null)c.wxRisk=(st==='cuidadoso'?1.4:st==='metronomo'?1.2:st==='agresivo'?0.7:st==='irregular'?0.8:1)*(0.85+Math.random()*0.3);return c.wxRisk;}
-function wxLapK(comp,w,wear,risk){const C=COMPOUNDS[comp],gw=wear<0.75?1-0.12*wear:Math.max(0.68,0.91-1.25*(wear-0.75));
-  let k=WXK*(1/Math.sqrt(C.grip*wetFactor(comp,w)*gw)-1);
-  if(!C.wet)k+=risk*0.12*Math.max(0,w-0.25)/0.75;          // lisos con agua: aquaplaning y salidas
-  else if(comp==='I')k+=risk*0.05*Math.max(0,w-0.6)/0.4;   // intermedios encharcados
-  else k+=0.025*Math.max(0,0.15-w)/0.15;                   // lluvia en seco: se destrozan
+/* v56: pérdida por vuelta (fracción de la vuelta en seco con medios) MEDIDA con los bots en Monza y Montmeló (scratchpad wxpace.js), agua 0-0,8.
+   Antes salía de la fórmula de agarre y se quedaba muy corta: con 0,6-0,8 de agua los lisos pierden 40-50 s por vuelta, no 10. */
+const WXT={w:[0,0.2,0.4,0.6,0.8,1],M:[0,0.19,0.26,0.53,0.62,0.7],I:[0.14,0.145,0.16,0.26,0.42,0.55],W:[0.29,0.165,0.18,0.175,0.185,0.19]};
+function wxTab(comp,w){const T=WXT[COMPOUNDS[comp].wet?comp:'M'],x=clamp(w,0,1)*5,i=Math.min(4,Math.floor(x)),f=x-i;return T[i]+(T[i+1]-T[i])*f+(COMPOUNDS[comp].wet?0:(1/COMPOUNDS[comp].grip-1)*0.5);}
+function wxLapK(comp,w,wear,risk){const gw=wear<0.75?1-0.12*wear:Math.max(0.68,0.91-1.25*(wear-0.75));
+  let k=wxTab(comp,w)+WXK*(1/Math.sqrt(gw)-1);
+  if(!COMPOUNDS[comp].wet)k+=(risk-1)*0.12*Math.max(0,w-0.25); // los prudentes temen más ir con lisos en mojado
+  else if(comp==='I')k+=(risk-1)*0.06*Math.max(0,w-0.5);
   return k;}
 function wxBase(R){return (R.est&&R.est.lap)||90;}
 function wxLine(R,c){const m=R.meanWet||0;return clamp(((c.wetFelt!=null?c.wetFelt:m)+0.02)/(m+0.02),0.4,1.2);} // la trazada se seca antes que la media
@@ -1550,12 +1553,14 @@ function stepRace(R,dt){
       if(R.sc.phase!=='gone'&&p.prog>scProg(R)+1&&!pen.sc&&!p.unlap){pen.sc=1;p.pen+=10;if(R.fx)R.events.push({type:'sc_pen',car:p,who:'el safety car'});}}}
   // adelantar con safety car o en zona de bandera amarilla: tienes 10 s para devolver la posición (el otro piloto intenta recuperarla) o te caen 5 s
   if(R.phase==='race'&&R.mode==='race'){const p=R.player;
+    /* v56: adelantar dentro del pit lane (tú o ellos parando) no cuenta: mientras alguien está en boxes solo se apunta quién va delante */
+    if(p&&!p.bot&&p.pit&&!p.dnf&&!p.finished&&R.ypass){for(const o of cars)if(o!==p)R.ypass.prev[o.id]=o.prog>p.prog;}
     if(p&&!p.bot&&!p.pit&&!p.dnf&&!p.finished){const Y=R.ypass||(R.ypass={prev:{},owe:null});const N=R.tr.N,scOn=!!R.sc;
       // no cuenta si la amarilla es por ti (te has salido / vas lento), si acabas de volver a pista, o si pasas al coche accidentado o lento
       const pv=Math.hypot(p.vx,p.vy);if(p.off||p.recover>0||(!scOn&&pv<60))Y.offT=R.t;
       const mine=R.t-(Y.offT||-99)<6;
       const inY=scOn?!(p.off||p.recover>0||p.unlap):!mine&&R.yellow.some(y=>{const d=(y-p.idx+N)%N;return d<110||d>N-45;});
-      for(const o of cars){if(o===p||o.pit||o.dnf||o.finished)continue;const ahead=o.prog>p.prog;
+      for(const o of cars){if(o===p||o.dnf||o.finished)continue;const ahead=o.prog>p.prog;if(o.pit){Y.prev[o.id]=ahead;continue;}
         const oSlow=o.off||o.recover>0||o.engineDead||o.ooc>R.t||(!scOn&&Math.hypot(o.vx,o.vy)<0.6*Math.max(80,pv));
         if(Math.abs(o.prog-p.prog)<2)continue; // rueda con rueda: aún no hay adelantamiento
         if(Y.prev[o.id]===true&&!ahead&&inY&&!oSlow&&!Y.owe&&!(R.t<(Y.cool&&Y.cool[o.id]||0))&&Math.abs(p.prog-o.prog)<60){Y.owe={id:o.id,t:R.t,who:o.name,sc:scOn};o.reclaim={id:p.id,until:R.t+12};if(R.fx)R.events.push({type:'y_warn',car:p,who:o.name,sc:scOn});}
