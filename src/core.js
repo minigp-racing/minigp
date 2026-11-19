@@ -3,7 +3,7 @@ const VMAX=600, ACC=440, BRAKE=540, REV_ACC=260, REV_MAX=120;
 const STEER=3.4, STEER_LOSS=0.42, A_LAT=1250, K_LAT=16;
 const W=60, RUNOFF=230, SP=10, KMH=0.55;
 const HL=19, HW=7.5, INERTIA=(4*HL*HL+4*HW*HW)/12, CARW=2*HW; // coche a escala real: 5,6 m × 2 m (6,5 px/m)
-const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=1.1,BOTAERO=0.75,BOTLIVE=0.9,BOTLIVEW=0.82,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6,L1LANE=34,L1FADE=500,L1END=300,L1ENDT=1.6,L1K=1,BOTFF=2,BOTFFT=0.12; // fracción de la frenada máxima que usan los bots
+const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=0.85,BOTAERO=0.75,BOTLIVE=0.9,BOTLIVEW=0.86,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6,L1LANE=34,L1FADE=500,L1END=300,L1ENDT=1.6,L1K=1,BOTFF=2,BOTFFT=0.12; // fracción de la frenada máxima que usan los bots
 const PIT_LAT=W+65, PIT_BOX=W+99, PIT_V=150, PIT_HALF=26, BOT_BRAKE=BRAKE*0.66;
 // modos de motor: ahorro / normal / ataque
 const EMODES=[{n:'Ahorro',p:0.965,heat:0.55,fuel:0.88,wear:0.5},{n:'Normal',p:1,heat:1,fuel:1,wear:1},{n:'Ataque',p:1.035,heat:1.5,fuel:1.12,wear:2.2}];
@@ -365,7 +365,7 @@ function onPitLane(tr,c){const d=dOf(tr,c.idx);if(d<-(PITL+PITE+2)||d>PITL+PITE+
 
 const DIFF={facil:[0.84,0.93],normal:[0.91,0.985],dificil:[0.96,1.035],experto:[1.0,1.06]};
 /* v50: dificultad adaptativa: el nivel de los bots se ajusta tras cada carrera a tu ritmo (ADAPT, lo guarda la interfaz) */
-let ADAPT=0;
+let ADAPT=0,WADAPT=0; /* v58: WADAPT = ritmo extra (o menos) de los bots con la pista mojada, aprendido aparte (dificultad adaptativa) */
 let DEFMIN=0.45,DEFK=0.4,WETLOOK=1,AQUAK=0.97; /* v50: bots que defienden (carácter mínimo y fuerza base) */
 
 // carácter de cada piloto: si no se ha definido a mano, se deriva de su nombre (siempre el mismo para el mismo piloto)
@@ -647,7 +647,7 @@ function botControl(R,c,dt){
   /* v46: con poco agarre (mojado, gomas frías o equivocadas) el bot es más prudente que la raíz cuadrada: antes se salía un 10-20 % del tiempo */
   const wRel=wetFactor(c.compound,c.wet||0)*tyreTempF(c),gF=Math.sqrt(gRaw/(c.aqua>0?0.28:1))*(wRel<0.95?Math.pow(wRel,WGX-0.5):1);
   // en recta el agarre apenas limita (solo prudencia); en curva y frenada, sí
-  let target=vl0*c.skill*c.pace*slow*(vl0>=VMAX*1.02?Math.min(1,0.9+0.1*gF):gF);
+  let target=vl0*c.skill*c.pace*slow*(WADAPT?1+WADAPT*clamp((R.meanWet||0)/0.3,0,1):1)*(vl0>=VMAX*1.02?Math.min(1,0.9+0.1*gF):gF);
   /* v52: con charcos llenos por delante y gomas que no evacúan bastante, el bot levanta antes de llegar al umbral del aquaplaning
      (en Las Vegas con lluvia iban a 285 km/h con intermedios, hacían aquaplaning en la recta y se salían todos en la curva) */
   if(AQUAK>0&&c.compound!=='W'&&tr.pudAt&&R.water&&!underSC){const thr=(c.compound==='I'?400:290)*AQUAK;if(vf>thr*0.9){for(let k=0;k<90;k+=3){const L=tr.pudAt.get((c.idx+k)%N);if(!L)continue;let hit=false;for(const q of L){const p=tr.puddles[q];if(R.water[p.i]>=p.th*0.9){hit=true;break;}}if(hit){target=Math.min(target,Math.sqrt(thr*thr+2*BOTDEC*G*1.2*k*tr.sp));break;}}}}
@@ -1396,7 +1396,7 @@ function crossLine(R,c){
     return;}
   if(R.mode==='quali'&&c.lap===1)c.lapStart=t;
   if(c.redSkip){c.redSkip=false;c.lapStart=t;}
-  else if(c.lap>=2){const lt=t-c.lapStart;c.lastLap=lt;if(c.bestLap==null||lt<c.bestLap)c.bestLap=lt;c.lapStart=t;c.lapTimes.push(lt);
+  else if(c.lap>=2){const lt=t-c.lapStart;c.lastLap=lt;if(c.bestLap==null||lt<c.bestLap)c.bestLap=lt;c.lapStart=t;c.lapTimes.push(lt);(c.lapW||(c.lapW=[])).push(R.meanWet||0);
     if(R.fx&&c.isPlayer)R.events.push({type:'lap',car:c,time:lt});}
   if(c.lap>=2&&!c.pittedThisLap){
     const df=c.fuelAtLap-c.fuel,dw=c.wear-c.wearAtLap;

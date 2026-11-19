@@ -26,7 +26,7 @@ const STORES={settings,newChamp};
 function saveTeams(){sset('minigp3_teams',TEAMS);}
 function saveChamp(){if(CH&&CH.career){if(CR){CR.ch=CH;sset('minigp6_career',CR);}}else sset('minigp4_champ',CH);}
 setUsePhoto(settings.photo===1); /* v45: foto aérea solo si se eligió en Ajustes */
-ADAPT=settings.adapt||0;
+ADAPT=0;WADAPT=settings.adaptW||0;
 function saveSettings(){sset('minigp3_settings',settings);applyPhotoSetting();if(ui&&ui.rtx!==settings.realtex){ui.rtx=settings.realtex;try{clearTiles();}catch(e){}}}
 /* v45: foto aérea opcional: al cambiarla se rehacen circuito y baldosas */
 function applyPhotoSetting(){const v=settings.photo===1;if(typeof USE_PHOTO!=='undefined'&&USE_PHOTO!==v){setUsePhoto(v);for(const k in GFX)delete GFX[k];if(typeof TRK_CACHE!=='undefined')for(const k in TRK_CACHE)delete TRK_CACHE[k];try{clearTiles();}catch(e){}}}
@@ -667,7 +667,7 @@ function openQuick(){
   ${grp('flag','Carrera',F('Vueltas',segHtml('settings','laps',OPT.laps))+F('Coches',segHtml('settings','cars',OPT.cars))+F('Dificultad',segHtml('settings','diff',OPT.diff))+F('Clasificación',segHtml('settings','quali',OPT.quali))+F('Formato de clasificación',segHtml('settings','qfmt',[[1,'Q1 · Q2 · Q3'],[0,'Sesión única']]))+F('Clasificación',segHtml('settings','qlive',[[1,'En directo (decides cuándo salir)'],[0,'Vuelta cronometrada']]))+F('Duración de cada sesión',segHtml('settings','qlen',[[3,'3 min'],[5,'5 min'],[8,'8 min']]))+F('Vuelta de formación',segHtml('settings','formation',OPT.formation)))}
   ${grp('car','Tu coche y estrategia',`<div class="wide2">${F('Neumático de salida · Litostone',segHtml('settings','comp',OPT.comp))}</div>`+F('Gasolina de salida',segHtml('settings','fuel',OPT.fuel))+F('Desgaste y consumo',segHtml('settings','mult',OPT.mult))+F('Ayudas de estabilidad',segHtml('settings','aids',OPT.aids)))}
   ${grp('var','Condiciones',F('Clima',segHtml('settings','weather',OPT.weather))+`<div class="wide2">${F('Hora',segHtml('settings','tod',OPT.tod))}</div>`)}
-  ${grp('brain','Rivales y reglas',F('Rivales que aprenden de tu ritmo '+(settings.adapt?'('+(settings.adapt>0?'+':'')+(settings.adapt*100).toFixed(1)+' %)':''),segHtml('settings','adaptOn',[[1,'Sí'],[0,'No']]))+F('Errores y averías de rivales',segHtml('settings','incidents',OPT.incidents))+F('Daños y averías',segHtml('settings','damage',OPT.damage))+F('Safety car',segHtml('settings','scOn',OPT.scOn))+F('Modelo del safety car',segHtml('settings','scModel',OPT.scModel)))}
+  ${grp('brain','Rivales y reglas',F('Rivales que aprenden de tu ritmo '+(settings.adapt||settings.adaptW?'('+(settings.adapt>0?'+':'')+((settings.adapt||0)*100).toFixed(1)+' % seco · '+(settings.adaptW>0?'+':'')+((settings.adaptW||0)*100).toFixed(1)+' % mojado)':''),segHtml('settings','adaptOn',[[1,'Sí'],[0,'No']]))+F('Errores y averías de rivales',segHtml('settings','incidents',OPT.incidents))+F('Daños y averías',segHtml('settings','damage',OPT.damage))+F('Safety car',segHtml('settings','scOn',OPT.scOn))+F('Modelo del safety car',segHtml('settings','scModel',OPT.scModel)))}
   ${grp('radio','Presentación',F('Ingeniero por radio',segHtml('settings','voice',OPT.voice))+F('Repetición de accidentes',segHtml('settings','autoRep',OPT.autoRep)))}
   <section class="mgrp">${wingHtml(ti)}</section>
   <button class="go" id="qGo">Empezar</button>
@@ -991,7 +991,8 @@ function launch(cfg,btn){
 function newEvent(cfg){
   const ti=cfg.track,steer=settings.steer;
   EV=Object.assign({},cfg,{steer,aids:settings.aids!==0,seed:Math.floor(Math.random()*1e9),roster:rosterFromTeams(cfg.teams,cfg.nCars,cfg.diff),est:simEstimate(ti,cfg.mult,steer)});
-  if(settings.adaptOn!==0&&settings.adapt){EV.adapt=settings.adapt;for(const e of EV.roster)if(!e.isPlayer)e.skill*=1+settings.adapt;} // rivales que aprenden de tu ritmo
+  WADAPT=(settings.adaptOn!==0||settings.diff==='auto')?(settings.adaptW||0):0; /* v58: ritmo en mojado aprendido */
+  if((settings.adaptOn!==0||settings.diff==='auto')&&settings.adapt){EV.adapt=settings.adapt;for(const e of EV.roster)if(!e.isPlayer)e.skill*=1+settings.adapt;} // rivales que aprenden de tu ritmo
   if(EV.practice){startPractice();return;}
   if(EV.weekend){EV.sets={S:2,M:2,H:2,I:3,W:3};EV.stage='practice';startPractice();return;}
   if(EV.quali){
@@ -1291,7 +1292,8 @@ function nextCorner(p){ // siguiente curva de verdad por delante (mínimo local 
     return {d:q*tr.sp,v:v[i],dir,kind};}
   return null;}
 // rivales que aprenden: comparan tu mejor vuelta con la del rival más rápido y se ajustan para la próxima
-function adaptUpdate(pBest,bBest){if(settings.adaptOn===0||!pBest||!bBest||!isFinite(pBest)||!isFinite(bBest))return '';
+/* v58: unificado con adaptLearn (antes los dos sistemas escribían settings.adapt y con «Adaptativa» se aplicaba dos veces) */
+function adaptUpdate(pBest,bBest){return '';if(settings.adaptOn===0||!pBest||!bBest||!isFinite(pBest)||!isFinite(bBest))return '';
   const g=(bBest-pBest)/bBest,old=settings.adapt||0;settings.adapt=clamp(old+clamp(0.6*g,-0.02,0.02),-0.05,0.07);saveSettings();
   const d=settings.adapt-old;return Math.abs(d)<0.0005?'':` · Rivales ${d>0?'más rápidos':'más lentos'} la próxima vez (${settings.adapt>=0?'+':''}${(settings.adapt*100).toFixed(1)} %)`;}
 function vib(p){try{if(settings.vib!==0&&document.body.classList.contains('touch')&&navigator.vibrate)navigator.vibrate(p);}catch(e){}}
@@ -3014,11 +3016,16 @@ function teleHtml(){const T=ui.tele;if(!T||!T.laps.length)return '';const L=T.la
     <div class="hint">Verde en la gráfica de temperatura = ventana ideal del ${C.name.toLowerCase()}. Bajo la velocidad: verde gas, rojo freno.</div></details>`;}
 /* v50: dificultad adaptativa. Tras cada carrera compara tu vuelta típica (mediana, sin la primera) con la del 3.er bot más rápido
    y mueve el nivel de los bots hacia ti (como mucho ±2 % por carrera, entre Fácil y Experto). */
-function adaptLearn(){EV.adaptMsg='';if(!EV||EV.diff!=='auto'||R.mode!=='race'||EV.adaptDone)return;EV.adaptDone=true;const p=R.player;if(!p||p.bot||p.dnf)return;
-  const med=a=>{a=a.filter(x=>x>0&&isFinite(x)).sort((x,y)=>x-y);return a.length?a[a.length>>1]:null;},lt=c=>c.lapTimes.slice(1);
-  if(lt(p).length<2)return;const pm=med(lt(p)),bm=R.cars.filter(c=>c!==p&&!c.dnf&&lt(c).length>=2).map(c=>med(lt(c))).filter(Boolean).sort((a,b)=>a-b);if(!pm||bm.length<3)return;
-  const err=bm[2]/pm-1,old=settings.adapt||0;settings.adapt=clamp(old+clamp(err,-0.03,0.03)*0.7,-0.07,0.075);saveSettings();
-  const dl=settings.adapt-old;EV.adaptMsg=Math.abs(dl)<0.002?' · bots: igual':dl>0?' · bots: +'+(dl*100).toFixed(1).replace('.',',')+' % para la próxima':' · bots: '+(dl*100).toFixed(1).replace('.',',')+' % para la próxima';}
+/* v58: dificultad adaptativa separada para seco y mojado (vueltas con la pista mojada, agua media >0,15, aprenden aparte)
+   y más rápida en las 3 primeras carreras. Compara tu vuelta mediana con la del 3.er bot más rápido en esas mismas vueltas. */
+function adaptLearn(){EV.adaptMsg='';if(!EV||!(EV.diff==='auto'||settings.adaptOn!==0)||R.mode!=='race'||EV.adaptDone)return;EV.adaptDone=true;const p=R.player;if(!p||p.bot||p.dnf)return;
+  const med=a=>{a=a.filter(x=>x>0&&isFinite(x)).sort((x,y)=>x-y);return a.length?a[a.length>>1]:null;};
+  const laps=(c,wet)=>c.lapTimes.map((t,i)=>({t,i,w:(c.lapW||[])[i]||0})).filter(x=>x.i>0&&(wet?x.w>0.15:x.w<0.1)).map(x=>x.t);
+  const n=settings.adaptN||0,gain=n<3?1:0.7,step=n<3?0.05:0.03,msg=[];
+  for(const wet of [false,true]){const pl=laps(p,wet);if(pl.length<2)continue;const pm=med(pl),bm=R.cars.filter(c=>c!==p&&!c.dnf&&laps(c,wet).length>=2).map(c=>med(laps(c,wet))).filter(Boolean).sort((a,b)=>a-b);if(!pm||bm.length<3)continue;
+    const err=bm[2]/pm-1,key=wet?'adaptW':'adapt',old=settings[key]||0,nv=wet?clamp(old+clamp(err,-step,step)*gain,-0.05,0.12):clamp(old+clamp(err,-step,step)*gain,-0.07,0.075);settings[key]=nv;
+    const dl=nv-old;msg.push((wet?'en mojado ':'')+(Math.abs(dl)<0.002?'igual':(dl>0?'+':'')+(dl*100).toFixed(1).replace('.',',')+' %'));}
+  if(!msg.length)return;settings.adaptN=n+1;saveSettings();EV.adaptMsg=' · bots: '+msg.join(', ')+' para la próxima';}
 function showRaceResults(){
   finishAll();adaptLearn();
   try{$('board').innerHTML=boardHtml();}catch(e){} /* v46: el tablero de la izquierda pasa a mostrar la clasificación final */
