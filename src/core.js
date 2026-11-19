@@ -323,7 +323,7 @@ function onPitLane(tr,c){const d=dOf(tr,c.idx);if(d<-(PITL+PITE+2)||d>PITL+PITE+
 const DIFF={facil:[0.84,0.93],normal:[0.91,0.985],dificil:[0.96,1.035],experto:[1.0,1.06]};
 /* v50: dificultad adaptativa: el nivel de los bots se ajusta tras cada carrera a tu ritmo (ADAPT, lo guarda la interfaz) */
 let ADAPT=0;
-let DEFMIN=0.45,DEFK=0.4; /* v50: bots que defienden (carácter mínimo y fuerza base) */
+let DEFMIN=0.45,DEFK=0.4,WETLOOK=1,AQUAK=0.97; /* v50: bots que defienden (carácter mínimo y fuerza base) */
 
 // carácter de cada piloto: si no se ha definido a mano, se deriva de su nombre (siempre el mismo para el mismo piloto)
 const STYLES={defensor:{n:'defiende muy duro',def:0.92},agresivo:{n:'muy agresivo atacando',agr:0.92},cuidadoso:{n:'cuida mucho los neumáticos',bru:0.05},rompe:{n:'castiga mucho los neumáticos',bru:0.8},metronomo:{n:'un metrónomo, casi no falla',reg:0.95},irregular:{n:'rápido pero irregular, comete errores',reg:0.15,agr:0.7}};
@@ -602,9 +602,12 @@ function botControl(R,c,dt){
   const wv=clamp((c.wet||0)*1.6,0,1),vl0=R.steerMode==='sim'&&tr.vWet&&wv>0.02?tr.vLimS[(c.idx+2)%N]*(1-wv)+tr.vWet[(c.idx+2)%N]*wv:(R.steerMode==='sim'?tr.vLimS:tr.vLim)[(c.idx+2)%N];
   const gRaw=(R.steerMode==='sim'?1:wingAero(c,vl0))*tyreGrip(c)*(1-0.15*c.dWing)*(1-0.12*c.dSusp)*(c.punct?0.55:1);
   /* v46: con poco agarre (mojado, gomas frías o equivocadas) el bot es más prudente que la raíz cuadrada: antes se salía un 10-20 % del tiempo */
-  const wRel=wetFactor(c.compound,c.wet||0)*tyreTempF(c)*(c.aqua>0?0.28:1),gF=Math.sqrt(gRaw)*(wRel<0.95?Math.pow(wRel,WGX-0.5):1);
+  const wRel=wetFactor(c.compound,c.wet||0)*tyreTempF(c),gF=Math.sqrt(gRaw/(c.aqua>0?0.28:1))*(wRel<0.95?Math.pow(wRel,WGX-0.5):1);
   // en recta el agarre apenas limita (solo prudencia); en curva y frenada, sí
   let target=vl0*c.skill*c.pace*slow*(vl0>=VMAX*1.02?Math.min(1,0.9+0.1*gF):gF);
+  /* v52: con charcos llenos por delante y gomas que no evacúan bastante, el bot levanta antes de llegar al umbral del aquaplaning
+     (en Las Vegas con lluvia iban a 285 km/h con intermedios, hacían aquaplaning en la recta y se salían todos en la curva) */
+  if(AQUAK>0&&c.compound!=='W'&&tr.pudAt&&R.water&&!underSC){const thr=(c.compound==='I'?400:290)*AQUAK;if(vf>thr*0.9){for(let k=0;k<90;k+=3){const L=tr.pudAt.get((c.idx+k)%N);if(!L)continue;let hit=false;for(const q of L){const p=tr.puddles[q];if(R.water[p.i]>=p.th*0.9){hit=true;break;}}if(hit){target=Math.min(target,Math.sqrt(thr*thr+2*BOTDEC*G*1.2*k*tr.sp));break;}}}}
   // primera vuelta con la parrilla agrupada: se frena antes en las curvas y se deja más aire al de delante
   const L1=R.mode==='race'&&R.phase==='race'&&c.lap<=1&&!c.isPlayer;
   // v44: menos prudencia (antes frenaban un 6 % antes y dejaban casi el doble de hueco: las salidas eran un paseo)
@@ -640,7 +643,10 @@ function botControl(R,c,dt){
   /* v46: comprobación en directo con el agarre real del coche (gomas gastadas, gasolina, alerón): la tabla daba algunas curvas rápidas «a fondo» y se abrían */
   /* v48: en mojado la comprobación usa la frenada real (antes la de seco: llegaban a Eau Rouge frenando a fondo y sin agarre para girar)
      y deja más margen (el volante del bot al tope solo saca ~75 % del agarre). Medido en Spa con lluvia: 395 → 170 salidas (tests/wetoffs.js). En seco no cambia. */
-  if(SIMB&&tr.kR&&!underSC){const wq=wv>0.02,gl=gripLat(c,Math.max(150,Math.abs(vf)),R)*(wq?BOTLIVEW:BOTLIVE),dec=BOTDEC*G*2.7*0.85*(wq?Math.min(1,Math.pow(tyreGrip(c)*trackGrip(R,c)/0.95,1.5)):1);let vb=1e9;for(let k=2;k<64;k+=3){const kk=tr.kR[(c.idx+k)%N];if(kk<2e-5)continue;const vc=Math.sqrt(gl/kk);vb=Math.min(vb,Math.sqrt(vc*vc+2*dec*k*tr.sp));}target=Math.min(target,vb*c.skill*c.pace);}
+  /* v52: el agarre de la comprobación se calcula con el agua que hay en la curva que viene, no solo donde está el coche:
+     llegando de una recta seca a una curva mojada frenaban tarde y se iban largos todos, uno detrás de otro */
+  if(SIMB&&tr.kR&&!underSC){const w0=c.wet||0;let wA=w0;if(R.water&&WETLOOK>0){for(let k=4;k<64;k+=6){const j=(c.idx+k)%N,wj=R.water[j]*(R.dry?1-0.85*R.dry[j]:1);if(wj>wA)wA=wj;}const g0=tyreGrip(c);c.wet=w0+(wA-w0)*WETLOOK;if(tyreGrip(c)>g0)c.wet=w0;}
+    const wq=wv>0.02||c.wet*1.6>0.02,gl=gripLat(c,Math.max(150,Math.abs(vf)),R)*(wq?BOTLIVEW:BOTLIVE),dec=BOTDEC*G*2.7*0.85*(wq?Math.min(1,Math.pow(tyreGrip(c)*trackGrip(R,c)/0.95,1.5)):1);c.wet=w0;let vb=1e9;for(let k=2;k<64;k+=3){const kk=tr.kR[(c.idx+k)%N];if(kk<2e-5)continue;const vc=Math.sqrt(gl/kk);vb=Math.min(vb,Math.sqrt(vc*vc+2*dec*k*tr.sp));}target=Math.min(target,vb*c.skill*c.pace);}
   if(SIMB){const kk=Math.max(Math.abs(tr.k[(c.idx+4)%N]),Math.abs(tr.k[(c.idx+10)%N]));target*=Math.sqrt(Math.max(0.55,1-kk*Math.abs(c.offset)*1.2));}
   if(underSC){ // en fila detrás del coche de seguridad / del de delante, sin adelantar
     let ahead=null,da=1e9;for(const o of R.cars){if(o===c||o.pit||o.dnf||o.finished||(rc&&o===rc))continue;const d=o.prog-c.prog;if(d>0&&d<da){da=d;ahead=o;}}
@@ -660,6 +666,8 @@ function botControl(R,c,dt){
   if(c.brakeFail&&vf>target){target=vf-60*dt*60;} // sin frenos: apenas puede frenar
   speedCtl(c,vf,target,T.bru);
   if(c.brakeFail)c.brake=Math.min(c.brake,0.15);
+  /* v52: en aquaplaning, como un piloto: levanta, no frena y no mueve el volante */
+  if(c.aqua>0&&!underSC){c.throttle=0;c.brake=0;c.steer*=0.3;}
   // con el volante al tope no se pisa a fondo: primero se endereza (si no, el coche se abre a la hierba)
   if(SIMB&&Math.abs(vf)>140&&Math.abs(c.steer)>0.85&&c.throttle>0.4){c.throttle=Math.abs(c.steer)>0.97?0.15:0.4;}
   // KERS: en recta, cuando hay energía
