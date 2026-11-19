@@ -1354,6 +1354,10 @@ function fxFrame(dt){
     else if(ev.type==='blue'&&!attract){radioSay('Bandera azul. '+ev.who+' te va a doblar, déjale pasar.','blue',12,true);}
     else if(ev.type==='pit_speed'&&!attract){flash(ev.pen?'Penalización +5 s':'Exceso de velocidad','Entrada al pit lane a '+ev.kmh+' km/h (límite 80)',2.4);radioSay(ev.pen?'Exceso de velocidad en el pit lane: cinco segundos. Frena antes de la línea.':'Has entrado muy rápido al pit lane. Frena antes de la línea.',null,0,true);}
     else if(ev.type==='blue_pen'&&!attract){flash('Penalización +5 s','No has respetado la bandera azul',2.2);radioSay('Penalización por ignorar las azules. Hay que dejar pasar.',null,0,true);}
+    else if(ev.type==='red_flag'&&!attract){flash('BANDERA ROJA','Carrera detenida · accidente muy grave de '+(ev.car.isPlayer?'ti':ev.car.name),REDWAIT+0.5);radioSay(ev.car.isPlayer?'¿Estás bien? Bandera roja, carrera parada.':'¡Bandera roja, bandera roja! Accidente muy grave de '+ev.car.name+'. Levanta, vamos a la parrilla.',null,0,true);vib([200,100,200]);}
+    else if(ev.type==='red_restart'&&!attract){const p=R.player;flash(ev.full?'Nueva salida':'Reanudación desde parado','Parrilla en orden de carrera · coches reparados y gomas nuevas'+(p&&!p.dnf?' ('+COMPOUNDS[p.compound].name.toLowerCase()+')':''),3);radioSay(ev.full?'Se repite la salida desde cero. Concéntrate en las luces.':'Salimos desde la parrilla en el orden de carrera. Te hemos reparado el coche y puesto gomas nuevas. Atento a las luces.',null,0,true);}
+    else if(ev.type==='undercut'&&!attract&&R.player&&(ev.target===R.player||ev.car===R.player)){if(ev.target===R.player)radioSay(ev.car.name+' va a parar al final de esta vuelta: busca el undercut. Aprieta o paramos justo después para cubrirle.','uc',20,true);}
+    else if(ev.type==='cover'&&!attract&&R.player&&ev.target===R.player){radioSay(ev.car.name+' para justo después que tú para cubrir el undercut. Vuelta de salida a tope.','cov',20,true);}
     else if(ev.type==='sc_out'&&!attract){flash('SAFETY CAR','Sin adelantamientos · en fila detrás',3);radioSay('Safety car, safety car. No adelantes. Si necesitas parar, es buen momento.',null,0,true);}
     else if(ev.type==='sc_in'&&!attract){radioSay('El safety car entra esta vuelta. Prepárate para la salida.',null,0,true);flash('El safety car entra esta vuelta','',2.5);}
     else if(ev.type==='sc_end'&&!attract){flash('¡Bandera verde!','Ya se puede adelantar',2);radioSay('Verde, verde, verde. ¡A por ellos!',null,0,true);}
@@ -1366,7 +1370,7 @@ function fxFrame(dt){
       if(ev.type==='pitenter'){flash('Pit lane','Limitador automático · tu box se marca en amarillo',1.8);radioSay('Entras en boxes. Preparamos '+COMPOUNDS[ev.car.nextCompound].name.toLowerCase()+'.','pin',5,true);}
       if(ev.type==='pitmiss'){flash('Te has pasado la entrada','Seguimos fuera · BOX sigue pedido para la próxima vuelta',2);radioSay('Te has pasado la entrada a boxes. Lo intentamos la próxima vuelta.','pmiss',5,true);}
       if(ev.type==='pitstop'&&ev.car.pitFail){const F=ev.car.pitFail;radioSay(F.k==='nut'?'¡Problema con la tuerca '+F.w+'! Espera, espera…':F.k==='jack'?'¡El gato ha fallado! Cambiamos de gato…':F.k==='fuel'?'La manguera no engancha… espera.':F.k==='unsafe'?'Ojo, salida insegura: nos van a sancionar, cinco segundos.':'Parada hecha. ¡Vamos!','pit',20);}
-      else if(ev.type==='pitstop'){radioSay('Parada limpia. '+COMPOUNDS[ev.car.nextCompound].name+(ev.car.fuelAdd>1?' y '+Math.round(ev.car.fuelAdd)+' litros':'')+'. Ruedas frías al salir.','pit',20);}
+      else if(ev.type==='pitstop'){radioSay('Parada limpia. '+COMPOUNDS[ev.car.nextCompound].name+(ev.car.fuelAdd>1?' y '+Math.round(ev.car.fuelAdd)+' litros':'')+'. Gomas de las mantas: casi en temperatura.','pit',20);}
       if(ev.type==='pitstop'&&ev.car.pitFail&&ev.car.pitFail.k!=='loose')flash(ev.car.pitFail.k==='unsafe'?'Salida insegura · +5 s':'Parada lenta',ev.car.pitFail.x?'+'+ev.car.pitFail.x.toFixed(1).replace('.',',')+' s':'',2);
       else if(ev.type==='pitstop')flash('Parada en boxes',`${COMPOUNDS[ev.car.nextCompound].name} · +${Math.round(ev.car.fuelAdd)} L`,1.6);
       if(ev.type==='pitdone')flash('¡Vamos, vamos!','',1);
@@ -1453,7 +1457,7 @@ function marshalUpdate(dt){
 /* v46: banderas en los puestos de comisarios: amarilla agitada antes de un incidente (doble si está muy cerca), verde al pasarlo y amarilla con el cartel SC con coche de seguridad */
 function drawPostFlags(Rv){const G=R&&gfxFor(R.tr);if(!G||!G.posts||R.mode!=='race'||R.phase!=='race')return;const N=R.tr.N,sc=R.sc&&R.sc.phase!=='gone',tm=performance.now()/1000;
   for(const q of G.posts){if(Math.abs(q.x-cam.x)>Rv||Math.abs(q.y-cam.y)>Rv)continue;let col=null,dbl=false;
-    if(sc)col='#ffd400';else for(const y of R.yellow){const d=(y-q.i+N)%N;if(d>0&&d<110){col='#ffd400';if(d<45)dbl=true;break;}if(d>N-45){col=col||'#17b34a';}}
+    if(R.red)col='#e8231b';else if(sc)col='#ffd400';else for(const y of R.yellow){const d=(y-q.i+N)%N;if(d>0&&d<110){col='#ffd400';if(d<45)dbl=true;break;}if(d>N-45){col=col||'#17b34a';}}
     if(!col)continue;ctx.save();ctx.translate(q.x,q.y);ctx.rotate(q.a);
     for(let k=0;k<(dbl?2:1);k++){const ox=9+k*7,w=Math.sin(tm*9+k*1.7+q.i);ctx.strokeStyle='#ddd';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(ox,-5);ctx.lineTo(ox+w*3,-19);ctx.stroke();
       ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(ox+w*3,-19);ctx.quadraticCurveTo(ox+w*3+5,-19+w*2,ox+w*3+10,-18+w);ctx.lineTo(ox+w*3+10,-12+w);ctx.quadraticCurveTo(ox+w*3+5,-13+w*2,ox+w*3,-13);ctx.closePath();ctx.fill();}
@@ -2290,6 +2294,7 @@ function render(dt){
         ctx.fillStyle='#ddd';ctx.fillRect(sx-w-1,sy-14,1.6,16);ctx.fillStyle='#1f6fff';ctx.beginPath();ctx.moveTo(sx-w,sy-14);ctx.lineTo(sx-w-14,sy-12+fl);ctx.lineTo(sx-w-13,sy-5+fl);ctx.lineTo(sx-w,sy-7);ctx.closePath();ctx.fill();}}
   }
   drawRainOverlay(dt);
+  drawAheadHint(cx,cy,z);
   if(!attract&&!ui.replay)drawSpeedFX(cx,cy,dt);
   if(!attract)drawLens(dt);
   if(!attract)drawConfetti(dt);
@@ -2301,6 +2306,19 @@ function render(dt){
 // v44: sensación de velocidad. Por encima de ~200 km/h aparecen estelas finas en los bordes de la pantalla que corren hacia fuera
 // (más con DRS/rebufo); se desvanecen al frenar. Muy sutil a propósito: no debe tapar la pista.
 const SPD_ST=[];
+/* v55: móvil en horizontal: si el circuito que viene (1,2-3 s por delante) se sale de la pantalla, flecha doble en el borde hacia donde sigue */
+function drawAheadHint(cx,cy,z){if(!COMPACT||PORTRAIT||attract||ui.replay||!R||(R.phase!=='race'&&R.phase!=='countdown'))return;
+  const p=R.player;if(!p||p.dnf||p.finished||p.pit)return;const tr=R.tr,N=tr.N,v=Math.max(150,Math.hypot(p.vx,p.vy)),rot=camMode==='rot',cr=Math.cos(rot?cam.rot:0),sr=Math.sin(rot?cam.rot:0);
+  const top=58*UI_U+8,bot=Math.max(top+60,(ui.hudTop||VH)-6),L=10,Rr=VW-10,scr=(x,y)=>{const dx=(x-cam.x)*z,dy=(y-cam.y)*z;return [cx+dx*cr-dy*sr,cy+dx*sr+dy*cr];};
+  const [px,py]=scr(p.x,p.y);
+  for(const ts of [1.2,2,3]){const i=(p.idx+Math.round(v*ts/tr.sp))%N,rl=tr.rl?tr.rl[i]:0,[sx,sy]=scr(tr.xs[i]+tr.nx[i]*rl,tr.ys[i]+tr.ny[i]*rl);
+    if(sx>L&&sx<Rr&&sy>top&&sy<bot)continue;
+    let ux=sx-px,uy=sy-py;const d=Math.hypot(ux,uy)||1;ux/=d;uy/=d;let t=1e9;
+    if(ux>0.01)t=Math.min(t,(Rr-14-px)/ux);if(ux<-0.01)t=Math.min(t,(L+14-px)/ux);if(uy>0.01)t=Math.min(t,(bot-14-py)/uy);if(uy<-0.01)t=Math.min(t,(top+14-py)/uy);
+    if(!(t>20&&t<1e8))break;const ex=px+ux*t,ey=py+uy*t,pul=0.55+0.25*Math.sin(performance.now()/160);
+    ctx.save();ctx.translate(ex,ey);ctx.rotate(Math.atan2(uy,ux));ctx.globalAlpha=pul*(ts<1.5?1:0.8);ctx.fillStyle='#fff';ctx.strokeStyle='rgba(0,0,0,.55)';ctx.lineWidth=2;ctx.lineJoin='round';
+    for(let j=0;j<2;j++){const o=-j*10;ctx.beginPath();ctx.moveTo(o+7,0);ctx.lineTo(o-4,-9);ctx.lineTo(o-1,0);ctx.lineTo(o-4,9);ctx.closePath();ctx.stroke();ctx.fill();}
+    ctx.restore();break;}}
 function drawSpeedFX(cx,cy,dt){
   const p=R.player;if(!p||p.dnf)return;const kmh=Math.hypot(p.vx,p.vy)*KMH;
   const k=clamp((kmh-200)/130,0,1)*(1+0.4*(p.slip||0)+(p.drsOpen?0.3:0));
@@ -2758,12 +2776,16 @@ function updateCam(dt){
   const base=(COMPACT?clamp(Math.min(VW,VH)/640*1.45,0.5,2.2)*0.8*mz:clamp(Math.min(VW,VH)/640*1.45,0.7,2.2))*(attract?0.8:1); // coches a escala real: más cerca
   // a más velocidad, la cámara se aleja: se ve más circuito y se nota la velocidad
   const f=attract?0:Math.pow(Math.min(1,sp/VMAX),1.15);
-  const zk=COMPACT?(mz>1?0.3:0.42):0.36,tz=(rot?base*(1-(zk-0.01)*f):base*(0.98-zk*f))*(p.drsOpen?0.93:1);
+  /* v55: móvil en horizontal: la pantalla es baja. Yendo hacia arriba/abajo de la pantalla (o con cámara giratoria) se aleja hasta un 22 % para ver más por delante */
+  const land=COMPACT&&!PORTRAIT;if(land){const vert=sp>40?Math.abs(rot?1:p.vy/sp):0;ui.vertS=(ui.vertS||0)+(vert-(ui.vertS||0))*Math.min(1,2*dt);}
+  const zk=COMPACT?(mz>1?0.3:0.42):0.36,tz=(rot?base*(1-(zk-0.01)*f):base*(0.98-zk*f))*(p.drsOpen?0.93:1)*(land?1-0.22*(ui.vertS||0)*(0.4+0.6*f):1);
   cam.z+=(tz-cam.z)*Math.min(1,(tz<cam.z?1.4:2.2)*dt);
-  const look=COMPACT?(rot?0.22+0.26*f:0.26+0.28*f):(rot?0.14+0.14*f:0.2+0.17*f),tx=p.x+p.vx*look,ty=p.y+p.vy*look,k=Math.min(1,(rot?10:4)*dt);
+  const look=(COMPACT?(rot?0.22+0.26*f:0.26+0.28*f):(rot?0.14+0.14*f:0.2+0.17*f))*(land&&!rot?1.45:1),tx=p.x+p.vx*look,ty=p.y+p.vy*look,k=Math.min(1,(rot?10:4)*dt);
   cam.x+=(tx-cam.x)*k;cam.y+=(ty-cam.y)*k;
   // móvil: el coche nunca se aleja tanto del centro como para quedar debajo de las esferas
-  if(COMPACT&&ui.hudTop){const free=ui.hudTop,lim=Math.max(30,(free-58*UI_U)*0.3)/cam.z,dx=cam.x-p.x,dy=cam.y-p.y,d=Math.hypot(dx,dy);if(d>lim){cam.x=p.x+dx/d*lim;cam.y=p.y+dy/d*lim;}}
+  if(COMPACT&&ui.hudTop){const free=ui.hudTop,lim=Math.max(30,(free-58*UI_U)*0.3)/cam.z,dx=cam.x-p.x,dy=cam.y-p.y,d=Math.hypot(dx,dy);
+    if(land&&!rot){const lx=0.3*VW/cam.z;if(Math.abs(dx)>lx)cam.x=p.x+Math.sign(dx)*lx;if(Math.abs(dy)>lim)cam.y=p.y+Math.sign(dy)*lim;} /* v55: en horizontal el coche puede irse hacia un lado: se ve mucho más por delante yendo de lado */
+    else if(d>lim){cam.x=p.x+dx/d*lim;cam.y=p.y+dy/d*lim;}}
   const tr_=-p.a-Math.PI/2;cam.rot+=angNorm(tr_-cam.rot)*Math.min(1,5*dt);
 }
 

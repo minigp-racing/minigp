@@ -292,7 +292,7 @@ function wetNeed(R,c){if(!R.weather||R.weather.type==='dry')return 0;const lap=(
    wxPlan: agua media que habrá en la pista (radar + secado/encharcado) cada 10 s durante ~3 vueltas (compartida, se recalcula cada 4 s).
    wxStint: segundos que se pierden con una goma durante el resto de la carrera; parar compensa si lo ganado supera la parada.
    Así, quien va con lluvia en un chaparrón que se acaba no para si quedan pocas vueltas o si la pista sigue mojada lo bastante. */
-let WXGAIN=3,WXK=0.55;
+let WXGAIN=3,WXK=0.55,UNDERCUT=true,UCLAPS=4,UCCOLD=1.0,REDPOW=640,REDWAIT=3.5;
 function wxPlan(R){const Wt=R.weather;if(R.wxP&&Math.abs(R.wxP.t-Wt.t)<4)return R.wxP;
   const lap=(R.est&&R.est.lap)||90,st=10,H=Math.max(200,lap*3.2);let w=R.meanWet||0,tg=w;const a=[w];
   for(let t=st,i=1;t<=H;t+=st,i++){if(i%2===1)tg=forecastWet(R,[t]);w=clamp(w+(tg-w)*(tg>w?0.07:0.016)*st,0,1);a.push(w);}
@@ -750,7 +750,7 @@ function pitControl(R,c,dt){
     {const bi=((Math.round(boxD(c.slot))%N)+N)%N,bx=tr.xs[bi]+tr.nx[bi]*tr.pitSide*PIT_BOX,by=tr.ys[bi]+tr.ny[bi]*tr.pitSide*PIT_BOX,k=Math.min(1,4*dt);
      c.x+=(bx-c.x)*k;c.y+=(by-c.y)*k;c.a+=angNorm(tr.ang[bi]-c.a)*k;}
     if(c.pitT<=0&&R.liveQ){c.qLaps=0;if(c.bot){const w=R.meanWet||0;c.nextCompound=w>0.62?'W':w>0.2?'I':'S';}}
-    if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?50:68;c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;if(c.dWing>0.15&&c.fixNose!==false)c.dWing=0;c.fixNose=null;if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.pittedThisLap=true;c.pit='out';
+    if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?58:80; /* v54: mantas térmicas (antes salían a 50/68 °C, −7 % de agarre: el undercut casi nunca salía) */c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;if(c.dWing>0.15&&c.fixNose!==false)c.dWing=0;c.fixNose=null;if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.pittedThisLap=true;c.pit='out';
       // v45: las averías (aceite, frenos) ya no se arreglan en boxes: solo el morro
       if(c.looseW!=null){c.looseAt=R.t+3+Math.random()*9;}
       if(R.fx)R.events.push({type:'pitdone',car:c});}
@@ -1079,6 +1079,15 @@ function botStrategy(R,c){
   let req=false;
   if(c.fuel<lf*fpl*1.04+1&&c.fuel<fpl*2.2)req=true;
   if(c.wear+2*wpl>0.9&&c.wear+left*wpl>1.0)req=true;
+  /* v54: undercut y cobertura. Si le toca parar en las próximas ~3 vueltas y va pegado a un rival que aún no ha parado, se adelanta
+     (con gomas nuevas gana tiempo mientras el otro sigue con las gastadas). Si el que le sigue de cerca acaba de parar, para él también para cubrirlo. */
+  if(!req&&UNDERCUT&&R.mode==='race'&&c.lap>=2&&left>=3&&c.wear>0.3&&R.standings&&!(R.weather&&R.weather.type!=='dry'&&(R.meanWet||0)>0.05)&&!(R.sc&&R.sc.phase!=='gone')){
+    const soon=c.wear+UCLAPS*wpl>0.9&&c.wear+left*wpl>1.0,i=R.standings.indexOf(c),T=c.traits||{},ag=T.agr==null?0.5:T.agr;
+    if(soon&&i>0){const a=R.standings[i-1];if(a&&!a.dnf&&!a.pit&&!a.finished&&a.team!==c.team&&(a.stops||0)<=(c.stops||0)){const g=gapBehind(R,a,c);
+      const tw=Math.min(a.wear,0.75)*0.12+Math.max(0,a.wear-0.75)*1.25,gain=wxBase(R)*0.5*tw-UCCOLD; /* lo que gana en una vuelta con gomas nuevas (frías en la salida) frente a las gastadas del rival */
+      if(g!=null&&g<gain+0.5*(ag-0.5)&&Math.random()<0.5+0.5*ag){req=true;c.ucTarget=a.id;if(R.fx)R.events.push({type:'undercut',car:c,target:a});}}}
+    if(!req&&c.wear+(UCLAPS+2)*wpl>0.9&&c.wear+left*wpl>1.0){const b=R.standings[i+1];if(b&&!b.dnf&&b.team!==c.team&&(b.pit||b.pittedThisLap)&&(b.stops||0)>(c.stops||0)-1){const g=gapBehind(R,c,b);
+      if(g!=null&&g<wxPitLoss(R)+3&&Math.random()<0.4+0.5*(T.def==null?0.5:T.def)){req=true;if(R.fx)R.events.push({type:'cover',car:c,target:b});}}}}
   // v45: la goma de recambio se elige con el agua que el piloto nota en la trazada (no solo la media de la pista):
   // si unas de lluvia se han comido en una vuelta es que la trazada se seca → un escalón más seco (W→I, I→lisos)
   if(req){c.pitReq=true;const wf=0.45*(R.meanWet||0)+0.55*(c.wetFelt!=null?c.wetFelt:(R.meanWet||0)),cw=COMPOUNDS[c.compound].wet;
@@ -1271,6 +1280,7 @@ function wreck(R,c,power,lx,ix,iy){
   c.av+=(Math.random()-0.5)*Math.min(8,power/70);c.r=(c.r||0)+(Math.random()-0.5)*Math.min(8,power/70);c.noESC=R.t+30;
   if(power>360&&!c.tumble){c.air=Math.min(0.85,0.25+(power-360)/500);c.airT=R.t;} // golpe brutal: el coche salta un instante
   c.dWing=1;c.dSusp=1;c.dRear=1;c.fire=power>520||(power>400&&Math.random()<0.55)||front<0.3&&Math.random()<0.55||Math.random()<0.2?R.t+7+Math.random()*8:0;c.fireBall=c.fire&&(power>380||Math.random()<0.5); /* v53: más fuego y, a veces, bola de fuego */
+  redFlagCheck(R,c,power);
   if(R.fx)R.events.push({type:'wreck',car:c,x:c.x,y:c.y,power,surf:c.surf,vx:c.vx,vy:c.vy});
   scTrigger(R,c,true);
 }
@@ -1355,6 +1365,23 @@ function scStep(R,dt){
   if(sc.phase==='in'){const d=dOf(tr,j);if(d>-(PITL+60)&&d<-(PITL+10)){sc.phase='gone';sc.endLap=lead.lap;if(R.fx)R.events.push({type:'sc_pit'});}}
 }
 
+/* v54: bandera roja solo con accidentes muy, muy graves (golpe brutal, vuelco con fuego o tres coches destrozados en 8 s).
+   Se para la carrera, se retiran los restos y los coches salen desde la parrilla en el orden de carrera, reparados y con gomas nuevas.
+   En la vuelta 1, salida de nuevo desde cero. */
+function redFlagCheck(R,c,power){if(R.mode!=='race'||R.red||R.redDone||R.liveQ||R.phase!=='race')return;const lead=R.standings&&R.standings[0];if(!lead||R.laps-lead.lap<2)return;
+  R.wreckLog=(R.wreckLog||[]).filter(t=>R.t-t<8);R.wreckLog.push(R.t);
+  if(power>REDPOW||(c.tumble&&c.fire&&power>520)||R.wreckLog.length>=3){R.red={t0:R.t,who:c};if(R.fx)R.events.push({type:'red_flag',car:c});}}
+function redFlagRestart(R){const tr=R.tr,N=tr.N;R.red=null;R.redDone=true;R.sc=null;R.debris=[];R.wxP=null;
+  const lead=R.standings[0],full=lead.lap<=1;let k=0;
+  for(const c of R.standings){if(c.dnf||c.finished){if(c.wrecked&&!c.gone){c.gone=true;c.x=-1e5;c.y=-1e5;c.vx=c.vy=0;}continue;}
+    const g=gridSlot(tr,k++),i=g.idx;c.x=tr.xs[i]+tr.nx[i]*g.lat;c.y=tr.ys[i]+tr.ny[i]*g.lat;c.a=tr.ang[i];c.vx=c.vy=0;c.r=0;c.av=0;c.yaw=0;c.idx=i;c.lat=g.lat;
+    c.steer=0;c.throttle=0;c.brake=0;c.ooc=0;c.recover=0;c.kersOn=false;c.lrpm=4500;
+    if(full)c.lap=0;c.maxLap=c.lap;c.prog=c.lap*N+i;c.lapStart=R.t;c.redSkip=!full;
+    c.dWing=0;c.dRear=0;c.dSusp=0;c.punct=false;c.wheelOff=null;c.rwOff=false;c.wheelDnfAt=null;c.looseAt=null;c.looseW=null;c.grain=0;
+    const dry=COMPOUNDS[c.compound].wet?chooseCompound(Math.max(1,lapsLeft(R,c)),R.est,Math.random()):c.compound;
+    c.compound=R.weather&&R.weather.type!=='dry'?compoundFor(R,c,dry):c.compound;c.wear=0;c.tws=[0,0,0,0];c.tt=COMPOUNDS[c.compound].win[0]+4;c.tts=[c.tt,c.tt,c.tt,c.tt];
+    c.pit=null;c.pitReq=false;c.rainCall=false;c.fuelCall=false;c.pittedThisLap=true;c.fuelAtLap=c.fuel;c.wearAtLap=0;c.unlap=false;c.blueT=0;c.yieldTo=null;}
+  R.phase='countdown';R.cd=0;R.redRestart=true;if(R.fx)R.events.push({type:'red_restart',full});}
 function crossLine(R,c){
   const t=R.t;
   if(R.liveQ){const L=R.liveQ;
@@ -1365,7 +1392,8 @@ function crossLine(R,c){
       if(c.bot&&c.qFly&&c.qLaps>=2&&c.qRuns&&c.qRun<c.qRuns.length-1){c.pitReq=true;c.qFly=false;}} // vuelta de entrada antes de la segunda tanda
     return;}
   if(R.mode==='quali'&&c.lap===1)c.lapStart=t;
-  if(c.lap>=2){const lt=t-c.lapStart;c.lastLap=lt;if(c.bestLap==null||lt<c.bestLap)c.bestLap=lt;c.lapStart=t;c.lapTimes.push(lt);
+  if(c.redSkip){c.redSkip=false;c.lapStart=t;}
+  else if(c.lap>=2){const lt=t-c.lapStart;c.lastLap=lt;if(c.bestLap==null||lt<c.bestLap)c.bestLap=lt;c.lapStart=t;c.lapTimes.push(lt);
     if(R.fx&&c.isPlayer)R.events.push({type:'lap',car:c,time:lt});}
   if(c.lap>=2&&!c.pittedThisLap){
     const df=c.fuelAtLap-c.fuel,dw=c.wear-c.wearAtLap;
@@ -1392,10 +1420,11 @@ function stepRace(R,dt){
     // con ayudas, mantener el gas pisado deja las vueltas en 11.000 (control de lanzamiento); sin ayudas hay que dosificar
     for(const c of R.cars){if(c.isPlayer&&!c.bot){const up=R.aids?5200:7000,dn=R.aids?3800:5000; // sin limitador: si lo dejas pisado se pasa de vueltas; hay que dar toques
       let v=(c.lrpm||4500)+(R.input.up?up:-dn)*dt+(Math.random()-0.5)*1800*dt;c.lrpm=clamp(v,4200,18500);}}
-    if(R.cd>=R.lightsOut){R.phase='race';R.t=0;if(R.mode==='race'){if(R.rolling){const lead=R.cars[0];R.standings=R.cars.slice();
+    if(R.cd>=R.lightsOut){const rr=R.redRestart;R.redRestart=false;R.phase='race';if(!rr)R.t=0;if(R.mode==='race'){if(R.rolling&&!rr){const lead=R.cars[0];R.standings=R.cars.slice();
         R.sc={phase:'out',s:(lead.idx+45)%R.tr.N,lap:0,v:0,x:0,y:0,a:0,t0:-30,leadLap0:0,clear:true,pens:{},rolling:true};R.scCount=(R.scCount||0)+1;if(R.fx)R.events.push({type:'sc_rolling'});}
-      else for(const c of R.cars)launchStart(R,c);}}return;}
+      else for(const c of R.cars)if(!c.dnf)launchStart(R,c);}}return;}
   R.t+=dt;
+  if(R.red&&R.t-R.red.t0>REDWAIT){redFlagRestart(R);return;}
   const tr=R.tr,N=tr.N,cars=R.cars;
   if(R.liveQ){const L=R.liveQ;L.t+=dt;
     if(!L.flag&&L.t>=L.T){L.flag=true;if(R.fx)R.events.push({type:'qflag'});for(const c of cars)if(c.pit==='service')c.pitT=1e9;}
