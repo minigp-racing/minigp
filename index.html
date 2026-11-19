@@ -285,6 +285,74 @@ body.compact.portrait #radio{top:auto;bottom:calc(330px*var(--u));max-width:calc
 #garage .gb{display:flex;gap:8px}#garage .gb .go{margin:0;flex:2;padding:9px}#garage .gb .btn2{flex:1}
 .compact #garage .gcard{gap:calc(14px*var(--u));width:min(760px,88vw)}.compact #garage .gh{font-size:calc(17px*var(--u))}.compact #garage .gs{font-size:calc(11px*var(--u))}.compact #garage .gq{font-size:calc(11.5px*var(--u));padding:calc(5px*var(--u)) calc(8px*var(--u))}
 .compact #garage .gt .btn2{font-size:calc(11.5px*var(--u))}.compact #garage .gb .go,.compact #garage .gb .btn2{font-size:calc(13px*var(--u));padding:calc(8px*var(--u))}
+
+/* ===== v59: estilo sobrio de los menús (carbono, líneas finas, un solo acento rojo) ===== */
+:root{--acc:#e10600;--acc2:#b30500;--line:#2a2f38;--btn:#1a1d23;--hi:#ff6b5e;--ink:#e9ebee;--mute:#9aa1ab;--bg0:#0d0f12;--bg1:#14171c;--bg2:#1b1f26}
+html,body{background:var(--bg0)}
+.overlay{background:rgba(6,7,9,.6)}
+.card{background:var(--bg1);border:1px solid var(--line);border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.overlay.page{background:var(--bg0)}
+.overlay.page>.card{background:var(--bg0)}
+.overlay.page h2{font-size:26px;font-weight:800;letter-spacing:.01em;border-bottom:1px solid var(--line);padding-bottom:12px;position:relative}
+.overlay.page h2::after{content:'';position:absolute;left:0;bottom:-1px;width:56px;height:3px;background:var(--acc)}
+.fl{color:var(--mute);opacity:1;font-size:10.5px;letter-spacing:.09em}
+.seg{gap:0;border:1px solid var(--line);border-radius:4px;overflow:hidden;flex-wrap:wrap}
+.seg button,.btn2{background:var(--bg2);border:0;border-right:1px solid var(--line);border-radius:0;color:var(--ink);font-size:13.5px;padding:8px 8px}
+.seg button:last-child{border-right:0}
+.seg button.sel{background:var(--bg2);color:#fff;box-shadow:inset 0 -3px 0 var(--acc);border-color:var(--line);font-weight:700}
+.seg.multi button.sel{background:#2a1214;box-shadow:inset 0 -3px 0 var(--acc)}
+.btn2{border:1px solid var(--line);border-radius:4px}
+.btn2:hover,.seg button:hover{background:#232831}
+.go{background:var(--acc);border-radius:4px;font-size:15px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:13px}
+.go:hover{background:#ff1a12}
+.go.alt{background:var(--bg2);border:1px solid var(--line)}
+.mgrp{background:transparent;border:0;border-top:1px solid var(--line);border-radius:0;padding:4px 0 12px}
+.mgrp h3{color:var(--ink);font-size:13px;text-transform:uppercase;letter-spacing:.08em}
+.hero{background:var(--bg1);border:1px solid var(--line);border-radius:6px}
+.hero .stats div{background:var(--bg2);border-radius:4px}
+.tsel,#meDrv,.team select{background:var(--bg2)!important;border:1px solid var(--line)!important;border-radius:4px!important;color:var(--ink)}
+.brand h1 span{color:var(--acc)}
+.stripe{display:none}
+/* menú principal */
+.overlay.home{background:linear-gradient(90deg,rgba(9,10,13,.95) 0,rgba(9,10,13,.85) 400px,rgba(9,10,13,.2) 70%,rgba(9,10,13,0))}
+.overlay.home .card{background:transparent;box-shadow:none;border-right:1px solid var(--line);justify-content:flex-start;padding-top:28px}
+.overlay.home .brand{justify-content:flex-start}.overlay.home .sub{text-align:left;color:var(--mute);margin:4px 0 22px;font-size:13px}
+.mtop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.micons{display:flex;gap:6px}
+.mico{width:38px;height:38px;border-radius:4px;background:var(--bg2);border:1px solid var(--line);color:var(--ink);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.mico:hover{border-color:#4a515c}.mico svg{width:19px;height:19px}
+.mlist{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.mi{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);border-left:3px solid transparent;color:var(--ink);padding:14px 14px 14px 13px;cursor:pointer;font-family:inherit}
+.mi b{font-size:19px;font-weight:800;letter-spacing:.01em}.mi small{font-size:12.5px;color:var(--mute)}
+.mi:hover,.mi:focus-visible{background:rgba(255,255,255,.04);border-left-color:var(--acc);outline:none}
+.mi.pri{border-left-color:var(--acc);background:linear-gradient(90deg,rgba(225,6,0,.18),rgba(225,6,0,0) 80%)}
+.mi.pri b{font-size:22px}
+.mi:disabled{opacity:.6;cursor:wait}
+.land .overlay.home .mlist{display:grid;grid-template-columns:1fr 1fr}.land .mi{padding:9px 12px}.land .mi b{font-size:16px}.land .mi small{display:none}.land .overlay.home .sub{margin:2px 0 10px}
+/* pasos con flechas */
+.ess{margin:16px 0 4px;border-top:1px solid var(--line)}
+.stp{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line)}
+.stp .lb{font-size:14px;color:var(--mute)}
+.stp .ctl{display:flex;align-items:center;gap:6px}
+.stp .ctl button{width:34px;height:34px;border-radius:4px;background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-size:18px;line-height:1;cursor:pointer;padding:0}
+.stp .ctl button:hover{border-color:#4a515c}
+.stp .val{min-width:150px;text-align:center;font-size:15px;font-weight:700}
+.compact .stp .val{min-width:110px}
+/* secciones plegadas */
+details.fold{border-bottom:1px solid var(--line)}
+details.fold>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:13px 2px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink);font-weight:700}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::after{content:'+';font-size:20px;color:var(--mute);font-weight:400}
+details.fold[open]>summary::after{content:'−'}
+details.fold>summary small{flex:1;margin-left:12px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+details.fold .two{padding-bottom:12px}
+/* pestañas de ajustes */
+.tabs{display:flex;gap:0;margin:16px 0 4px;border-bottom:1px solid var(--line)}
+.tabs button{background:transparent;border:0;color:var(--mute);font-size:14px;font-weight:700;padding:10px 16px;cursor:pointer;box-shadow:none;font-family:inherit}
+.tabs button.on{color:#fff;box-shadow:inset 0 -3px 0 var(--acc)}
+#settings .sec.off{display:none}
+#quickBody{max-width:920px;margin:0 auto}#settings>.card>*{max-width:920px}#quickBody .two{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}#quickBody .wide2{grid-column:1/-1!important}
+.portrait .hero{grid-template-columns:minmax(0,1fr)}.portrait .heroTrk{justify-self:center}.portrait .heroInfo{min-width:0}.portrait .hero .tsel{width:100%;max-width:100%}.portrait .stp .val{min-width:90px}
 </style>
 </head>
 <body>
@@ -326,29 +394,27 @@ body.compact.portrait #radio{top:auto;bottom:calc(330px*var(--u));max-width:calc
 
 <div id="menu" class="overlay home">
   <div class="card">
-    <div class="brand"><div class="flag"></div><h1>MINI <span>GP</span></h1></div>
-    <p class="sub">Hasta 22 coches · 33 circuitos · modo carrera</p>
-    <div class="stripe"></div>
-    <div class="bigbtns">
-      <button class="go play" id="bPlay">▶ Jugar ya</button>
-      <button class="go alt" id="bQuick">Carrera rápida</button>
-      <button class="go alt" id="bCareer">Modo carrera</button>
-      <button class="go alt" id="bChamp">Campeonato</button>
-      <button class="go alt small" id="bTeams">Equipos y pilotos</button>
-      <button class="go alt small" id="bSettings">⚙ Ajustes</button>
-      <button class="go alt small" id="bFull">⛶ Pantalla completa</button>
-      <button class="go alt small" id="bHelp">? Cómo se juega</button>
-    </div>
+    <div class="mtop"><div class="brand"><div class="flag"></div><h1>MINI <span>GP</span></h1></div>
+      <div class="micons"><button class="mico" id="bSettings" title="Ajustes" aria-label="Ajustes"></button><button class="mico" id="bFull" title="Pantalla completa" aria-label="Pantalla completa"></button><button class="mico" id="bHelp" title="Cómo se juega" aria-label="Cómo se juega"></button></div></div>
+    <p class="sub">Hasta 22 coches · 33 circuitos</p>
+    <nav class="mlist">
+      <button class="mi pri" id="bPlay"><b>Jugar ya</b><small>Montmeló · 3 vueltas · 12 coches · seco</small></button>
+      <button class="mi" id="bQuick"><b>Carrera rápida</b><small>Tú eliges circuito, vueltas y clima</small></button>
+      <button class="mi" id="bChamp"><b>Campeonato</b><small>Una temporada de varias carreras</small></button>
+      <button class="mi" id="bCareer"><b>Modo carrera</b><small>Tu equipo, tu personal y tu evolución</small></button>
+      <button class="mi" id="bTeams"><b>Equipos y pilotos</b><small>Nombres, colores, niveles y carácter</small></button>
+    </nav>
     <div class="credits">Trazados: <a href="https://github.com/bacinger/f1-circuits">bacinger/f1-circuits</a> (MIT) · Jarama aproximado · Coche: Vectores de <a href="https://www.vecteezy.com/free-vector/f1-car">Vecteezy</a> · Safety car: macrovector/Freepik · Texturas: Poly Haven (CC0) · Foto aérea de Montmeló: obra derivada de PNOA máxima actualidad, CC BY 4.0 <a href="https://www.scne.es">scne.es</a> (IGN)</div>
   </div>
 </div>
 <div id="settings" class="overlay page hidden">
   <div class="card">
     <h2>Ajustes</h2>
-    <div class="sec"><h3>Dirección</h3><div id="steerSeg"></div><div class="steerAdj" id="steerAdjMenu"></div></div>
-    <div class="sec"><h3>Sonido</h3><div id="engSnd"></div><div id="sndOpts"></div></div>
-    <div class="sec"><h3>Cámara y pantalla</h3><div id="viewOpts"></div></div>
-    <div class="sec"><h3>Controles</h3><div class="keys" style="margin-top:2px">
+    <div class="tabs" id="setTabs"><button data-t="drive" class="on">Conducción</button><button data-t="view">Imagen</button><button data-t="snd">Sonido</button></div>
+    <div class="sec" data-tab="drive"><h3>Dirección</h3><div id="steerSeg"></div><div class="steerAdj" id="steerAdjMenu"></div></div>
+    <div class="sec" data-tab="snd"><h3>Sonido</h3><div id="engSnd"></div><div id="sndOpts"></div></div>
+    <div class="sec" data-tab="view"><h3>Cámara y pantalla</h3><div id="viewOpts"></div></div>
+    <div class="sec" data-tab="drive"><h3>Controles</h3><div class="keys" style="margin-top:2px">
       <kbd>↑</kbd>/<kbd>W</kbd> acelerar · <kbd>↓</kbd>/<kbd>S</kbd> frenar · <kbd>←</kbd><kbd>→</kbd>/<kbd>A</kbd><kbd>D</kbd> girar (gira menos cuanto más rápido vas)<br>
       <kbd>Mayús</kbd>/<kbd>E</kbd> KERS · <kbd>F</kbd> abrir DRS · <kbd>Q</kbd> modo de motor (ahorro / normal / ataque) · <kbd>B</kbd> boxes · <kbd>1</kbd>–<kbd>5</kbd> neumático para la parada · <kbd>C</kbd> cámara · <kbd>T</kbd> repetición · <kbd>G</kbd> fantasma · <kbd>V</kbd> voz de radio · <kbd>M</kbd> sonido · <kbd>P</kbd>/<kbd>Esc</kbd> pausa</div></div>
     <button class="go" id="setBack">Volver</button>
@@ -2539,6 +2605,12 @@ function segHtml(store,key,opts,multi){
   return `<div class="seg${multi?' multi':''}" data-store="${store}" data-set="${key}"${multi?' data-multi="1"':''}>`+
     opts.map(([v,l])=>`<button data-v="${v}" class="${multi?(cur.includes(+v)?'sel':''):(String(cur)===String(v)?'sel':'')}">${l}</button>`).join('')+'</div>';
 }
+/* v59: control con flechas: una fila, un valor, menos botones */
+function stepHtml(label,store,key,opts){const cur=String(STORES[store][key]);const i=Math.max(0,opts.findIndex(o=>String(o[0])===cur));
+  return `<div class="stp" data-store="${store}" data-set="${key}" data-opts='${esc(JSON.stringify(opts.map(o=>[o[0],String(o[1]).replace(/<[^>]*>/g,'')])))}'><span class="lb">${label}</span><span class="ctl"><button data-d="-1" aria-label="Anterior">‹</button><span class="val">${String(opts[i][1]).replace(/<[^>]*>/g,'')}</span><button data-d="1" aria-label="Siguiente">›</button></span></div>`;}
+document.addEventListener('click',e=>{const b=e.target.closest('.stp .ctl button');if(!b)return;const w=b.closest('.stp'),store=STORES[w.dataset.store],k=w.dataset.set,opts=JSON.parse(w.dataset.opts);
+  let i=opts.findIndex(o=>String(o[0])===String(store[k]));i=((i<0?0:i)+(+b.dataset.d)+opts.length)%opts.length;store[k]=NUMKEYS.includes(k)?parseInt(opts[i][0],10):opts[i][0];w.querySelector('.val').textContent=opts[i][1];
+  if(w.dataset.store==='settings')saveSettings();if((k==='track'||k==='laps')&&!$('quick').classList.contains('hidden'))openQuick();});
 const NUMKEYS=['tvcam','realtex','qlive','qlen','radioLvl','track','laps','quali','mult','cars','damage','aids','incidents','weekend','autoRep','formation','scOn','radio','voice','snd','ghost','vib','drsAuto','cornerHint','qfmt','adaptOn','carStyle'];
 document.addEventListener('click',e=>{
   const b=e.target.closest('.seg button');if(!b)return;
@@ -2631,7 +2703,9 @@ function openSettings(){
   $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Montmeló</span>${segHtml('settings','photo',[[0,'Dibujado (nítido)'],[1,'Foto aérea real']])}<span class="fl">Repeticiones</span>${segHtml('settings','tvcam',[[1,'Cámaras de TV'],[0,'Detrás del coche']])}<span class="fl">Suelo de los circuitos</span>${segHtml('settings','realtex',[[1,'Texturas reales'],[0,'Dibujado']])}<span class="fl">Estilo de los coches</span>${segHtml('settings','carStyle',[[0,'Realista'],[1,'Clásico']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
   $('engPick').onclick=engWavPick;if($('engDel'))$('engDel').onclick=()=>{try{localStorage.removeItem(ENGWAV_KEY);}catch(e){}settings.engMode='synth';saveSettings();engSampleStop();openSettings();};
   if($('voiceSel')){$('voiceSel').onchange=e=>{settings.voiceName=e.target.value;saveSettings();};$('voiceTry').onclick=()=>{try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance('Box, box. Ponemos medios y salimos por delante de Ortega.');u.lang='es-ES';u.rate=1.06;const v=pickVoice();if(v)u.voice=v;speechSynthesis.speak(u);}catch(e){}};}
-  showOnly('settings');}
+  setTab(ui.setTab||'drive');showOnly('settings');}
+function setTab(t){ui.setTab=t;document.querySelectorAll('#setTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));document.querySelectorAll('#settings .sec[data-tab]').forEach(s=>s.classList.toggle('off',s.dataset.tab!==t));}
+document.addEventListener('click',e=>{const b=e.target.closest('#setTabs button');if(b)setTab(b.dataset.t);});
 /* v46: elige tu piloto en carrera rápida y campeonato, entre los de «Equipos y pilotos» */
 function meFind(){for(let i=0;i<TEAMS.length;i++)for(let j=0;j<TEAMS[i].drivers.length;j++)if(TEAMS[i].drivers[j].player)return {i,j,d:TEAMS[i].drivers[j]};return null;}
 function meHtml(){const cur=meFind();return `<section class="mgrp"><h3>Tu piloto</h3><div class="two"><div class="wide2"><span class="fl">Eliges a uno de los pilotos de «Equipos y pilotos» (ahí puedes cambiar nombres y equipos)</span><select id="meDrv" style="width:100%">${TEAMS.map((t,i)=>`<optgroup label="${esc(t.name)}">${t.drivers.map((d,j)=>`<option value="${i}:${j}" ${d.player?'selected':''}>${esc(d.name)}</option>`).join('')}</optgroup>`).join('')}</select></div></div></section>`;}
@@ -2641,24 +2715,28 @@ function pickMe(i,j){const cur=meFind();if(cur&&cur.i===i&&cur.j===j)return;if(c
 function meBind(){const s=$('meDrv');if(!s)return;s.onchange=()=>{const [i,j]=s.value.split(':').map(Number);pickMe(i,j);};}
 function openQuick(){
   const ti=settings.track,T=TRACKS[ti],inf=trackInfo(ti),F=(l,h)=>`<div><span class="fl">${l}</span>${h}</div>`;
+  /* v59: secciones plegadas (recuerdan si estaban abiertas) */
+  const OPN=ui.qOpen||(ui.qOpen={}),fold=(id,title,sum,body)=>`<details class="fold" data-f="${id}"${OPN[id]?' open':''}><summary>${title}<small>${esc(sum||'')}</small></summary><div class="two">${body}</div></details>`;
   const grp=(ic,title,body,cls='')=>`<section class="mgrp ${cls}"><h3>${icon(ic,20)}${title}</h3><div class="two">${body}</div></section>`;
   $('quickBody').innerHTML=`<h2>Carrera rápida</h2>
   <div class="hero"><div class="heroTrk">${trackSvg(ti,300,190)}</div><div class="heroInfo">
     <span class="fl">Circuito</span>${trackSelect('qTrack',ti)}
     <div class="stats"><div><b>${(inf.len/1000).toFixed(2).replace('.',',')}</b><span>km por vuelta</span></div><div><b>${inf.corners}</b><span>curvas</span></div>
      <div><b>${((inf.len*settings.laps)/1000).toFixed(0)}</b><span>km de carrera</span></div><div>${lvlBars(Math.round(1+3*(T.wing||0.5)),4,'#b388ff')}<span>carga aerodinámica</span></div></div></div></div>
-  ${meHtml()}
-  ${grp('flag','Carrera',F('Vueltas',segHtml('settings','laps',OPT.laps))+F('Coches',segHtml('settings','cars',OPT.cars))+F('Dificultad',segHtml('settings','diff',OPT.diff))+F('Clasificación',segHtml('settings','quali',OPT.quali))+F('Formato de clasificación',segHtml('settings','qfmt',[[1,'Q1 · Q2 · Q3'],[0,'Sesión única']]))+F('Clasificación',segHtml('settings','qlive',[[1,'En directo (decides cuándo salir)'],[0,'Vuelta cronometrada']]))+F('Duración de cada sesión',segHtml('settings','qlen',[[3,'3 min'],[5,'5 min'],[8,'8 min']]))+F('Vuelta de formación',segHtml('settings','formation',OPT.formation)))}
-  ${grp('car','Tu coche y estrategia',`<div class="wide2">${F('Neumático de salida · Litostone',segHtml('settings','comp',OPT.comp))}</div>`+F('Gasolina de salida',segHtml('settings','fuel',OPT.fuel))+F('Desgaste y consumo',segHtml('settings','mult',OPT.mult))+F('Ayudas de estabilidad',segHtml('settings','aids',OPT.aids)))}
-  ${grp('var','Condiciones',F('Clima',segHtml('settings','weather',OPT.weather))+`<div class="wide2">${F('Hora',segHtml('settings','tod',OPT.tod))}</div>`)}
-  ${grp('brain','Rivales y reglas',F('Rivales que aprenden de tu ritmo '+(settings.adapt||settings.adaptW?'('+(settings.adapt>0?'+':'')+((settings.adapt||0)*100).toFixed(1)+' % seco · '+(settings.adaptW>0?'+':'')+((settings.adaptW||0)*100).toFixed(1)+' % mojado)':''),segHtml('settings','adaptOn',[[1,'Sí'],[0,'No']]))+F('Errores y averías de rivales',segHtml('settings','incidents',OPT.incidents))+F('Daños y averías',segHtml('settings','damage',OPT.damage))+F('Safety car',segHtml('settings','scOn',OPT.scOn))+F('Modelo del safety car',segHtml('settings','scModel',OPT.scModel)))}
-  ${grp('radio','Presentación',F('Ingeniero por radio',segHtml('settings','voice',OPT.voice))+F('Repetición de accidentes',segHtml('settings','autoRep',OPT.autoRep)))}
-  <section class="mgrp">${wingHtml(ti)}</section>
+  <div class="ess">
+    ${stepHtml('Vueltas','settings','laps',OPT.laps)}${stepHtml('Coches','settings','cars',OPT.cars)}${stepHtml('Dificultad','settings','diff',OPT.diff)}${stepHtml('Clima','settings','weather',OPT.weather)}${stepHtml('Hora','settings','tod',OPT.tod)}
+  </div>
+  ${fold('q','Clasificación',(settings.quali?(settings.qlive?'En directo':'Vuelta cronometrada')+(settings.qfmt?' · Q1 · Q2 · Q3':''):'Sin clasificación'),F('Clasificación',segHtml('settings','quali',OPT.quali))+F('Formato',segHtml('settings','qfmt',[[1,'Q1 · Q2 · Q3'],[0,'Sesión única']]))+F('Tipo',segHtml('settings','qlive',[[1,'En directo (decides cuándo salir)'],[0,'Vuelta cronometrada']]))+F('Duración de cada sesión',segHtml('settings','qlen',[[3,'3 min'],[5,'5 min'],[8,'8 min']]))+F('Vuelta de formación',segHtml('settings','formation',OPT.formation)))}
+  ${fold('c','Tu piloto y tu coche',COMPOUNDS[settings.comp]?COMPOUNDS[settings.comp].name+' · ayudas '+(settings.aids?'sí':'no'):'',meHtml().replace(/<\/?section[^>]*>/g,'').replace(/<h3>[^<]*<\/h3>/,'')+`<div class="wide2">${F('Neumático de salida · Litostone',segHtml('settings','comp',OPT.comp))}</div>`+F('Gasolina de salida',segHtml('settings','fuel',OPT.fuel))+F('Desgaste y consumo',segHtml('settings','mult',OPT.mult))+F('Ayudas de estabilidad',segHtml('settings','aids',OPT.aids)))}
+  ${fold('r','Rivales y reglas',(settings.damage?'Daños':'Sin daños')+' · '+(settings.scOn?'safety car':'sin safety car'),F('Rivales que aprenden de tu ritmo '+(settings.adapt||settings.adaptW?'('+(settings.adapt>0?'+':'')+((settings.adapt||0)*100).toFixed(1)+' % seco · '+(settings.adaptW>0?'+':'')+((settings.adaptW||0)*100).toFixed(1)+' % mojado)':''),segHtml('settings','adaptOn',[[1,'Sí'],[0,'No']]))+F('Errores y averías de rivales',segHtml('settings','incidents',OPT.incidents))+F('Daños y averías',segHtml('settings','damage',OPT.damage))+F('Safety car',segHtml('settings','scOn',OPT.scOn))+F('Modelo del safety car',segHtml('settings','scModel',OPT.scModel)))}
+  ${fold('w','Reglaje','Alerón, marchas y frenos',`<div class="wide2">${wingHtml(ti)}</div>`)}
+  ${fold('p','Presentación',(settings.voice?'Ingeniero por radio':'Sin radio'),F('Ingeniero por radio',segHtml('settings','voice',OPT.voice))+F('Repetición de accidentes',segHtml('settings','autoRep',OPT.autoRep)))}
   <button class="go" id="qGo">Empezar</button>
   <div class="row2"><button class="btn2" id="qPrac" title="Sin final: rueda lo que quieras con los rivales en pista">Entrenamientos libres</button><button class="btn2" id="qBack">Volver</button></div>`;
   $('qTrack').onchange=e=>{settings.track=parseInt(e.target.value,10);saveSettings();openQuick();};
   $('qPrac').onclick=()=>launch({track:settings.track,laps:99,diff:settings.diff,mult:0,quali:false,practice:true,comp:settings.comp,fuel:'full',nCars:settings.cars,damage:!!settings.damage,weather:settings.weather,wing:setupNorm(settings.track).wing,setup:setupNorm(settings.track),teams:TEAMS,champ:false},$('qPrac'));
   $('qGo').onclick=()=>launch({track:settings.track,laps:settings.laps,diff:settings.diff,mult:settings.mult,quali:!!settings.quali,comp:settings.comp,fuel:settings.fuel,nCars:settings.cars,damage:!!settings.damage,weather:settings.weather,wing:setupNorm(settings.track).wing,setup:setupNorm(settings.track),teams:TEAMS,champ:false},$('qGo'));
+  document.querySelectorAll('#quickBody details.fold').forEach(d=>d.addEventListener('toggle',()=>{ui.qOpen[d.dataset.f]=d.open;}));
   meBind();$('qBack').onclick=openMenu;showOnly('quick');
 }
 
@@ -2969,8 +3047,8 @@ function showHud(v){$('hud').classList.toggle('hidden',!v);}
 
 function launch(cfg,btn){
   audioInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
-  const txt=btn.textContent;btn.disabled=true;btn.textContent='Preparando…';
-  setTimeout(()=>{try{newEvent(cfg);}finally{btn.disabled=false;btn.textContent=txt;}},30);
+  const txt=btn.innerHTML;btn.disabled=true;btn.innerHTML=btn.classList.contains('mi')?'<b>Preparando…</b>':'Preparando…';
+  setTimeout(()=>{try{newEvent(cfg);}finally{btn.disabled=false;btn.innerHTML=txt;}},30);
 }
 function newEvent(cfg){
   const ti=cfg.track,steer=settings.steer;
@@ -3142,7 +3220,13 @@ async function goFull(){
 }
 $('bFull').onclick=goFull;
 if(IS_APP)$('bFull').style.display='none';
-const fsLabel=()=>{$('bFull').textContent=(document.fullscreenElement||document.webkitFullscreenElement)?'⛶ Salir de pantalla completa':!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?'⛶ Pantalla completa (instalar)':'⛶ Pantalla completa';};
+/* v59: menú principal sobrio: ajustes, pantalla completa y ayuda como iconos */
+const MICO={gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  full:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+  exit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
+  help:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>'};
+$('bSettings').innerHTML=MICO.gear;$('bHelp').innerHTML=MICO.help;
+const fsLabel=()=>{const on=!!(document.fullscreenElement||document.webkitFullscreenElement);$('bFull').innerHTML=on?MICO.exit:MICO.full;$('bFull').title=on?'Salir de pantalla completa':!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?'Pantalla completa (instalar)':'Pantalla completa';};
 document.addEventListener('fullscreenchange',fsLabel);document.addEventListener('webkitfullscreenchange',fsLabel);fsLabel();
 $('bQuick').onclick=openQuick;$('bPlay').onclick=()=>quickPlay($('bPlay'));$('bHelp').onclick=openWelcome;$('bSettings').onclick=openSettings;$('setBack').onclick=openMenu;$('bChamp').onclick=()=>{if(CH&&CH.career)CH=sget('minigp4_champ',null);openChamp();};$('bCareer').onclick=openCareer;$('bTeams').onclick=openTeams;
 

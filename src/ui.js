@@ -555,6 +555,12 @@ function segHtml(store,key,opts,multi){
   return `<div class="seg${multi?' multi':''}" data-store="${store}" data-set="${key}"${multi?' data-multi="1"':''}>`+
     opts.map(([v,l])=>`<button data-v="${v}" class="${multi?(cur.includes(+v)?'sel':''):(String(cur)===String(v)?'sel':'')}">${l}</button>`).join('')+'</div>';
 }
+/* v59: control con flechas: una fila, un valor, menos botones */
+function stepHtml(label,store,key,opts){const cur=String(STORES[store][key]);const i=Math.max(0,opts.findIndex(o=>String(o[0])===cur));
+  return `<div class="stp" data-store="${store}" data-set="${key}" data-opts='${esc(JSON.stringify(opts.map(o=>[o[0],String(o[1]).replace(/<[^>]*>/g,'')])))}'><span class="lb">${label}</span><span class="ctl"><button data-d="-1" aria-label="Anterior">‹</button><span class="val">${String(opts[i][1]).replace(/<[^>]*>/g,'')}</span><button data-d="1" aria-label="Siguiente">›</button></span></div>`;}
+document.addEventListener('click',e=>{const b=e.target.closest('.stp .ctl button');if(!b)return;const w=b.closest('.stp'),store=STORES[w.dataset.store],k=w.dataset.set,opts=JSON.parse(w.dataset.opts);
+  let i=opts.findIndex(o=>String(o[0])===String(store[k]));i=((i<0?0:i)+(+b.dataset.d)+opts.length)%opts.length;store[k]=NUMKEYS.includes(k)?parseInt(opts[i][0],10):opts[i][0];w.querySelector('.val').textContent=opts[i][1];
+  if(w.dataset.store==='settings')saveSettings();if((k==='track'||k==='laps')&&!$('quick').classList.contains('hidden'))openQuick();});
 const NUMKEYS=['tvcam','realtex','qlive','qlen','radioLvl','track','laps','quali','mult','cars','damage','aids','incidents','weekend','autoRep','formation','scOn','radio','voice','snd','ghost','vib','drsAuto','cornerHint','qfmt','adaptOn','carStyle'];
 document.addEventListener('click',e=>{
   const b=e.target.closest('.seg button');if(!b)return;
@@ -647,7 +653,9 @@ function openSettings(){
   $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Montmeló</span>${segHtml('settings','photo',[[0,'Dibujado (nítido)'],[1,'Foto aérea real']])}<span class="fl">Repeticiones</span>${segHtml('settings','tvcam',[[1,'Cámaras de TV'],[0,'Detrás del coche']])}<span class="fl">Suelo de los circuitos</span>${segHtml('settings','realtex',[[1,'Texturas reales'],[0,'Dibujado']])}<span class="fl">Estilo de los coches</span>${segHtml('settings','carStyle',[[0,'Realista'],[1,'Clásico']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
   $('engPick').onclick=engWavPick;if($('engDel'))$('engDel').onclick=()=>{try{localStorage.removeItem(ENGWAV_KEY);}catch(e){}settings.engMode='synth';saveSettings();engSampleStop();openSettings();};
   if($('voiceSel')){$('voiceSel').onchange=e=>{settings.voiceName=e.target.value;saveSettings();};$('voiceTry').onclick=()=>{try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance('Box, box. Ponemos medios y salimos por delante de Ortega.');u.lang='es-ES';u.rate=1.06;const v=pickVoice();if(v)u.voice=v;speechSynthesis.speak(u);}catch(e){}};}
-  showOnly('settings');}
+  setTab(ui.setTab||'drive');showOnly('settings');}
+function setTab(t){ui.setTab=t;document.querySelectorAll('#setTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));document.querySelectorAll('#settings .sec[data-tab]').forEach(s=>s.classList.toggle('off',s.dataset.tab!==t));}
+document.addEventListener('click',e=>{const b=e.target.closest('#setTabs button');if(b)setTab(b.dataset.t);});
 /* v46: elige tu piloto en carrera rápida y campeonato, entre los de «Equipos y pilotos» */
 function meFind(){for(let i=0;i<TEAMS.length;i++)for(let j=0;j<TEAMS[i].drivers.length;j++)if(TEAMS[i].drivers[j].player)return {i,j,d:TEAMS[i].drivers[j]};return null;}
 function meHtml(){const cur=meFind();return `<section class="mgrp"><h3>Tu piloto</h3><div class="two"><div class="wide2"><span class="fl">Eliges a uno de los pilotos de «Equipos y pilotos» (ahí puedes cambiar nombres y equipos)</span><select id="meDrv" style="width:100%">${TEAMS.map((t,i)=>`<optgroup label="${esc(t.name)}">${t.drivers.map((d,j)=>`<option value="${i}:${j}" ${d.player?'selected':''}>${esc(d.name)}</option>`).join('')}</optgroup>`).join('')}</select></div></div></section>`;}
@@ -657,24 +665,28 @@ function pickMe(i,j){const cur=meFind();if(cur&&cur.i===i&&cur.j===j)return;if(c
 function meBind(){const s=$('meDrv');if(!s)return;s.onchange=()=>{const [i,j]=s.value.split(':').map(Number);pickMe(i,j);};}
 function openQuick(){
   const ti=settings.track,T=TRACKS[ti],inf=trackInfo(ti),F=(l,h)=>`<div><span class="fl">${l}</span>${h}</div>`;
+  /* v59: secciones plegadas (recuerdan si estaban abiertas) */
+  const OPN=ui.qOpen||(ui.qOpen={}),fold=(id,title,sum,body)=>`<details class="fold" data-f="${id}"${OPN[id]?' open':''}><summary>${title}<small>${esc(sum||'')}</small></summary><div class="two">${body}</div></details>`;
   const grp=(ic,title,body,cls='')=>`<section class="mgrp ${cls}"><h3>${icon(ic,20)}${title}</h3><div class="two">${body}</div></section>`;
   $('quickBody').innerHTML=`<h2>Carrera rápida</h2>
   <div class="hero"><div class="heroTrk">${trackSvg(ti,300,190)}</div><div class="heroInfo">
     <span class="fl">Circuito</span>${trackSelect('qTrack',ti)}
     <div class="stats"><div><b>${(inf.len/1000).toFixed(2).replace('.',',')}</b><span>km por vuelta</span></div><div><b>${inf.corners}</b><span>curvas</span></div>
      <div><b>${((inf.len*settings.laps)/1000).toFixed(0)}</b><span>km de carrera</span></div><div>${lvlBars(Math.round(1+3*(T.wing||0.5)),4,'#b388ff')}<span>carga aerodinámica</span></div></div></div></div>
-  ${meHtml()}
-  ${grp('flag','Carrera',F('Vueltas',segHtml('settings','laps',OPT.laps))+F('Coches',segHtml('settings','cars',OPT.cars))+F('Dificultad',segHtml('settings','diff',OPT.diff))+F('Clasificación',segHtml('settings','quali',OPT.quali))+F('Formato de clasificación',segHtml('settings','qfmt',[[1,'Q1 · Q2 · Q3'],[0,'Sesión única']]))+F('Clasificación',segHtml('settings','qlive',[[1,'En directo (decides cuándo salir)'],[0,'Vuelta cronometrada']]))+F('Duración de cada sesión',segHtml('settings','qlen',[[3,'3 min'],[5,'5 min'],[8,'8 min']]))+F('Vuelta de formación',segHtml('settings','formation',OPT.formation)))}
-  ${grp('car','Tu coche y estrategia',`<div class="wide2">${F('Neumático de salida · Litostone',segHtml('settings','comp',OPT.comp))}</div>`+F('Gasolina de salida',segHtml('settings','fuel',OPT.fuel))+F('Desgaste y consumo',segHtml('settings','mult',OPT.mult))+F('Ayudas de estabilidad',segHtml('settings','aids',OPT.aids)))}
-  ${grp('var','Condiciones',F('Clima',segHtml('settings','weather',OPT.weather))+`<div class="wide2">${F('Hora',segHtml('settings','tod',OPT.tod))}</div>`)}
-  ${grp('brain','Rivales y reglas',F('Rivales que aprenden de tu ritmo '+(settings.adapt||settings.adaptW?'('+(settings.adapt>0?'+':'')+((settings.adapt||0)*100).toFixed(1)+' % seco · '+(settings.adaptW>0?'+':'')+((settings.adaptW||0)*100).toFixed(1)+' % mojado)':''),segHtml('settings','adaptOn',[[1,'Sí'],[0,'No']]))+F('Errores y averías de rivales',segHtml('settings','incidents',OPT.incidents))+F('Daños y averías',segHtml('settings','damage',OPT.damage))+F('Safety car',segHtml('settings','scOn',OPT.scOn))+F('Modelo del safety car',segHtml('settings','scModel',OPT.scModel)))}
-  ${grp('radio','Presentación',F('Ingeniero por radio',segHtml('settings','voice',OPT.voice))+F('Repetición de accidentes',segHtml('settings','autoRep',OPT.autoRep)))}
-  <section class="mgrp">${wingHtml(ti)}</section>
+  <div class="ess">
+    ${stepHtml('Vueltas','settings','laps',OPT.laps)}${stepHtml('Coches','settings','cars',OPT.cars)}${stepHtml('Dificultad','settings','diff',OPT.diff)}${stepHtml('Clima','settings','weather',OPT.weather)}${stepHtml('Hora','settings','tod',OPT.tod)}
+  </div>
+  ${fold('q','Clasificación',(settings.quali?(settings.qlive?'En directo':'Vuelta cronometrada')+(settings.qfmt?' · Q1 · Q2 · Q3':''):'Sin clasificación'),F('Clasificación',segHtml('settings','quali',OPT.quali))+F('Formato',segHtml('settings','qfmt',[[1,'Q1 · Q2 · Q3'],[0,'Sesión única']]))+F('Tipo',segHtml('settings','qlive',[[1,'En directo (decides cuándo salir)'],[0,'Vuelta cronometrada']]))+F('Duración de cada sesión',segHtml('settings','qlen',[[3,'3 min'],[5,'5 min'],[8,'8 min']]))+F('Vuelta de formación',segHtml('settings','formation',OPT.formation)))}
+  ${fold('c','Tu piloto y tu coche',COMPOUNDS[settings.comp]?COMPOUNDS[settings.comp].name+' · ayudas '+(settings.aids?'sí':'no'):'',meHtml().replace(/<\/?section[^>]*>/g,'').replace(/<h3>[^<]*<\/h3>/,'')+`<div class="wide2">${F('Neumático de salida · Litostone',segHtml('settings','comp',OPT.comp))}</div>`+F('Gasolina de salida',segHtml('settings','fuel',OPT.fuel))+F('Desgaste y consumo',segHtml('settings','mult',OPT.mult))+F('Ayudas de estabilidad',segHtml('settings','aids',OPT.aids)))}
+  ${fold('r','Rivales y reglas',(settings.damage?'Daños':'Sin daños')+' · '+(settings.scOn?'safety car':'sin safety car'),F('Rivales que aprenden de tu ritmo '+(settings.adapt||settings.adaptW?'('+(settings.adapt>0?'+':'')+((settings.adapt||0)*100).toFixed(1)+' % seco · '+(settings.adaptW>0?'+':'')+((settings.adaptW||0)*100).toFixed(1)+' % mojado)':''),segHtml('settings','adaptOn',[[1,'Sí'],[0,'No']]))+F('Errores y averías de rivales',segHtml('settings','incidents',OPT.incidents))+F('Daños y averías',segHtml('settings','damage',OPT.damage))+F('Safety car',segHtml('settings','scOn',OPT.scOn))+F('Modelo del safety car',segHtml('settings','scModel',OPT.scModel)))}
+  ${fold('w','Reglaje','Alerón, marchas y frenos',`<div class="wide2">${wingHtml(ti)}</div>`)}
+  ${fold('p','Presentación',(settings.voice?'Ingeniero por radio':'Sin radio'),F('Ingeniero por radio',segHtml('settings','voice',OPT.voice))+F('Repetición de accidentes',segHtml('settings','autoRep',OPT.autoRep)))}
   <button class="go" id="qGo">Empezar</button>
   <div class="row2"><button class="btn2" id="qPrac" title="Sin final: rueda lo que quieras con los rivales en pista">Entrenamientos libres</button><button class="btn2" id="qBack">Volver</button></div>`;
   $('qTrack').onchange=e=>{settings.track=parseInt(e.target.value,10);saveSettings();openQuick();};
   $('qPrac').onclick=()=>launch({track:settings.track,laps:99,diff:settings.diff,mult:0,quali:false,practice:true,comp:settings.comp,fuel:'full',nCars:settings.cars,damage:!!settings.damage,weather:settings.weather,wing:setupNorm(settings.track).wing,setup:setupNorm(settings.track),teams:TEAMS,champ:false},$('qPrac'));
   $('qGo').onclick=()=>launch({track:settings.track,laps:settings.laps,diff:settings.diff,mult:settings.mult,quali:!!settings.quali,comp:settings.comp,fuel:settings.fuel,nCars:settings.cars,damage:!!settings.damage,weather:settings.weather,wing:setupNorm(settings.track).wing,setup:setupNorm(settings.track),teams:TEAMS,champ:false},$('qGo'));
+  document.querySelectorAll('#quickBody details.fold').forEach(d=>d.addEventListener('toggle',()=>{ui.qOpen[d.dataset.f]=d.open;}));
   meBind();$('qBack').onclick=openMenu;showOnly('quick');
 }
 
@@ -985,8 +997,8 @@ function showHud(v){$('hud').classList.toggle('hidden',!v);}
 
 function launch(cfg,btn){
   audioInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
-  const txt=btn.textContent;btn.disabled=true;btn.textContent='Preparando…';
-  setTimeout(()=>{try{newEvent(cfg);}finally{btn.disabled=false;btn.textContent=txt;}},30);
+  const txt=btn.innerHTML;btn.disabled=true;btn.innerHTML=btn.classList.contains('mi')?'<b>Preparando…</b>':'Preparando…';
+  setTimeout(()=>{try{newEvent(cfg);}finally{btn.disabled=false;btn.innerHTML=txt;}},30);
 }
 function newEvent(cfg){
   const ti=cfg.track,steer=settings.steer;
@@ -1158,7 +1170,13 @@ async function goFull(){
 }
 $('bFull').onclick=goFull;
 if(IS_APP)$('bFull').style.display='none';
-const fsLabel=()=>{$('bFull').textContent=(document.fullscreenElement||document.webkitFullscreenElement)?'⛶ Salir de pantalla completa':!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?'⛶ Pantalla completa (instalar)':'⛶ Pantalla completa';};
+/* v59: menú principal sobrio: ajustes, pantalla completa y ayuda como iconos */
+const MICO={gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  full:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+  exit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
+  help:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>'};
+$('bSettings').innerHTML=MICO.gear;$('bHelp').innerHTML=MICO.help;
+const fsLabel=()=>{const on=!!(document.fullscreenElement||document.webkitFullscreenElement);$('bFull').innerHTML=on?MICO.exit:MICO.full;$('bFull').title=on?'Salir de pantalla completa':!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?'Pantalla completa (instalar)':'Pantalla completa';};
 document.addEventListener('fullscreenchange',fsLabel);document.addEventListener('webkitfullscreenchange',fsLabel);fsLabel();
 $('bQuick').onclick=openQuick;$('bPlay').onclick=()=>quickPlay($('bPlay'));$('bHelp').onclick=openWelcome;$('bSettings').onclick=openSettings;$('setBack').onclick=openMenu;$('bChamp').onclick=()=>{if(CH&&CH.career)CH=sget('minigp4_champ',null);openChamp();};$('bCareer').onclick=openCareer;$('bTeams').onclick=openTeams;
 

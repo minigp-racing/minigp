@@ -285,6 +285,74 @@ body.compact.portrait #radio{top:auto;bottom:calc(330px*var(--u));max-width:calc
 #garage .gb{display:flex;gap:8px}#garage .gb .go{margin:0;flex:2;padding:9px}#garage .gb .btn2{flex:1}
 .compact #garage .gcard{gap:calc(14px*var(--u));width:min(760px,88vw)}.compact #garage .gh{font-size:calc(17px*var(--u))}.compact #garage .gs{font-size:calc(11px*var(--u))}.compact #garage .gq{font-size:calc(11.5px*var(--u));padding:calc(5px*var(--u)) calc(8px*var(--u))}
 .compact #garage .gt .btn2{font-size:calc(11.5px*var(--u))}.compact #garage .gb .go,.compact #garage .gb .btn2{font-size:calc(13px*var(--u));padding:calc(8px*var(--u))}
+
+/* ===== v59: estilo sobrio de los menús (carbono, líneas finas, un solo acento rojo) ===== */
+:root{--acc:#e10600;--acc2:#b30500;--line:#2a2f38;--btn:#1a1d23;--hi:#ff6b5e;--ink:#e9ebee;--mute:#9aa1ab;--bg0:#0d0f12;--bg1:#14171c;--bg2:#1b1f26}
+html,body{background:var(--bg0)}
+.overlay{background:rgba(6,7,9,.6)}
+.card{background:var(--bg1);border:1px solid var(--line);border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.overlay.page{background:var(--bg0)}
+.overlay.page>.card{background:var(--bg0)}
+.overlay.page h2{font-size:26px;font-weight:800;letter-spacing:.01em;border-bottom:1px solid var(--line);padding-bottom:12px;position:relative}
+.overlay.page h2::after{content:'';position:absolute;left:0;bottom:-1px;width:56px;height:3px;background:var(--acc)}
+.fl{color:var(--mute);opacity:1;font-size:10.5px;letter-spacing:.09em}
+.seg{gap:0;border:1px solid var(--line);border-radius:4px;overflow:hidden;flex-wrap:wrap}
+.seg button,.btn2{background:var(--bg2);border:0;border-right:1px solid var(--line);border-radius:0;color:var(--ink);font-size:13.5px;padding:8px 8px}
+.seg button:last-child{border-right:0}
+.seg button.sel{background:var(--bg2);color:#fff;box-shadow:inset 0 -3px 0 var(--acc);border-color:var(--line);font-weight:700}
+.seg.multi button.sel{background:#2a1214;box-shadow:inset 0 -3px 0 var(--acc)}
+.btn2{border:1px solid var(--line);border-radius:4px}
+.btn2:hover,.seg button:hover{background:#232831}
+.go{background:var(--acc);border-radius:4px;font-size:15px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:13px}
+.go:hover{background:#ff1a12}
+.go.alt{background:var(--bg2);border:1px solid var(--line)}
+.mgrp{background:transparent;border:0;border-top:1px solid var(--line);border-radius:0;padding:4px 0 12px}
+.mgrp h3{color:var(--ink);font-size:13px;text-transform:uppercase;letter-spacing:.08em}
+.hero{background:var(--bg1);border:1px solid var(--line);border-radius:6px}
+.hero .stats div{background:var(--bg2);border-radius:4px}
+.tsel,#meDrv,.team select{background:var(--bg2)!important;border:1px solid var(--line)!important;border-radius:4px!important;color:var(--ink)}
+.brand h1 span{color:var(--acc)}
+.stripe{display:none}
+/* menú principal */
+.overlay.home{background:linear-gradient(90deg,rgba(9,10,13,.95) 0,rgba(9,10,13,.85) 400px,rgba(9,10,13,.2) 70%,rgba(9,10,13,0))}
+.overlay.home .card{background:transparent;box-shadow:none;border-right:1px solid var(--line);justify-content:flex-start;padding-top:28px}
+.overlay.home .brand{justify-content:flex-start}.overlay.home .sub{text-align:left;color:var(--mute);margin:4px 0 22px;font-size:13px}
+.mtop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.micons{display:flex;gap:6px}
+.mico{width:38px;height:38px;border-radius:4px;background:var(--bg2);border:1px solid var(--line);color:var(--ink);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.mico:hover{border-color:#4a515c}.mico svg{width:19px;height:19px}
+.mlist{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.mi{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);border-left:3px solid transparent;color:var(--ink);padding:14px 14px 14px 13px;cursor:pointer;font-family:inherit}
+.mi b{font-size:19px;font-weight:800;letter-spacing:.01em}.mi small{font-size:12.5px;color:var(--mute)}
+.mi:hover,.mi:focus-visible{background:rgba(255,255,255,.04);border-left-color:var(--acc);outline:none}
+.mi.pri{border-left-color:var(--acc);background:linear-gradient(90deg,rgba(225,6,0,.18),rgba(225,6,0,0) 80%)}
+.mi.pri b{font-size:22px}
+.mi:disabled{opacity:.6;cursor:wait}
+.land .overlay.home .mlist{display:grid;grid-template-columns:1fr 1fr}.land .mi{padding:9px 12px}.land .mi b{font-size:16px}.land .mi small{display:none}.land .overlay.home .sub{margin:2px 0 10px}
+/* pasos con flechas */
+.ess{margin:16px 0 4px;border-top:1px solid var(--line)}
+.stp{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line)}
+.stp .lb{font-size:14px;color:var(--mute)}
+.stp .ctl{display:flex;align-items:center;gap:6px}
+.stp .ctl button{width:34px;height:34px;border-radius:4px;background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-size:18px;line-height:1;cursor:pointer;padding:0}
+.stp .ctl button:hover{border-color:#4a515c}
+.stp .val{min-width:150px;text-align:center;font-size:15px;font-weight:700}
+.compact .stp .val{min-width:110px}
+/* secciones plegadas */
+details.fold{border-bottom:1px solid var(--line)}
+details.fold>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:13px 2px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink);font-weight:700}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::after{content:'+';font-size:20px;color:var(--mute);font-weight:400}
+details.fold[open]>summary::after{content:'−'}
+details.fold>summary small{flex:1;margin-left:12px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+details.fold .two{padding-bottom:12px}
+/* pestañas de ajustes */
+.tabs{display:flex;gap:0;margin:16px 0 4px;border-bottom:1px solid var(--line)}
+.tabs button{background:transparent;border:0;color:var(--mute);font-size:14px;font-weight:700;padding:10px 16px;cursor:pointer;box-shadow:none;font-family:inherit}
+.tabs button.on{color:#fff;box-shadow:inset 0 -3px 0 var(--acc)}
+#settings .sec.off{display:none}
+#quickBody{max-width:920px;margin:0 auto}#settings>.card>*{max-width:920px}#quickBody .two{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}#quickBody .wide2{grid-column:1/-1!important}
+.portrait .hero{grid-template-columns:minmax(0,1fr)}.portrait .heroTrk{justify-self:center}.portrait .heroInfo{min-width:0}.portrait .hero .tsel{width:100%;max-width:100%}.portrait .stp .val{min-width:90px}
 </style>
 </head>
 <body>
@@ -326,29 +394,27 @@ body.compact.portrait #radio{top:auto;bottom:calc(330px*var(--u));max-width:calc
 
 <div id="menu" class="overlay home">
   <div class="card">
-    <div class="brand"><div class="flag"></div><h1>MINI <span>GP</span></h1></div>
-    <p class="sub">Hasta 22 coches · 33 circuitos · modo carrera</p>
-    <div class="stripe"></div>
-    <div class="bigbtns">
-      <button class="go play" id="bPlay">▶ Jugar ya</button>
-      <button class="go alt" id="bQuick">Carrera rápida</button>
-      <button class="go alt" id="bCareer">Modo carrera</button>
-      <button class="go alt" id="bChamp">Campeonato</button>
-      <button class="go alt small" id="bTeams">Equipos y pilotos</button>
-      <button class="go alt small" id="bSettings">⚙ Ajustes</button>
-      <button class="go alt small" id="bFull">⛶ Pantalla completa</button>
-      <button class="go alt small" id="bHelp">? Cómo se juega</button>
-    </div>
+    <div class="mtop"><div class="brand"><div class="flag"></div><h1>MINI <span>GP</span></h1></div>
+      <div class="micons"><button class="mico" id="bSettings" title="Ajustes" aria-label="Ajustes"></button><button class="mico" id="bFull" title="Pantalla completa" aria-label="Pantalla completa"></button><button class="mico" id="bHelp" title="Cómo se juega" aria-label="Cómo se juega"></button></div></div>
+    <p class="sub">Hasta 22 coches · 33 circuitos</p>
+    <nav class="mlist">
+      <button class="mi pri" id="bPlay"><b>Jugar ya</b><small>Montmeló · 3 vueltas · 12 coches · seco</small></button>
+      <button class="mi" id="bQuick"><b>Carrera rápida</b><small>Tú eliges circuito, vueltas y clima</small></button>
+      <button class="mi" id="bChamp"><b>Campeonato</b><small>Una temporada de varias carreras</small></button>
+      <button class="mi" id="bCareer"><b>Modo carrera</b><small>Tu equipo, tu personal y tu evolución</small></button>
+      <button class="mi" id="bTeams"><b>Equipos y pilotos</b><small>Nombres, colores, niveles y carácter</small></button>
+    </nav>
     <div class="credits">Trazados: <a href="https://github.com/bacinger/f1-circuits">bacinger/f1-circuits</a> (MIT) · Jarama aproximado · Coche: Vectores de <a href="https://www.vecteezy.com/free-vector/f1-car">Vecteezy</a> · Safety car: macrovector/Freepik · Texturas: Poly Haven (CC0) · Foto aérea de Montmeló: obra derivada de PNOA máxima actualidad, CC BY 4.0 <a href="https://www.scne.es">scne.es</a> (IGN)</div>
   </div>
 </div>
 <div id="settings" class="overlay page hidden">
   <div class="card">
     <h2>Ajustes</h2>
-    <div class="sec"><h3>Dirección</h3><div id="steerSeg"></div><div class="steerAdj" id="steerAdjMenu"></div></div>
-    <div class="sec"><h3>Sonido</h3><div id="engSnd"></div><div id="sndOpts"></div></div>
-    <div class="sec"><h3>Cámara y pantalla</h3><div id="viewOpts"></div></div>
-    <div class="sec"><h3>Controles</h3><div class="keys" style="margin-top:2px">
+    <div class="tabs" id="setTabs"><button data-t="drive" class="on">Conducción</button><button data-t="view">Imagen</button><button data-t="snd">Sonido</button></div>
+    <div class="sec" data-tab="drive"><h3>Dirección</h3><div id="steerSeg"></div><div class="steerAdj" id="steerAdjMenu"></div></div>
+    <div class="sec" data-tab="snd"><h3>Sonido</h3><div id="engSnd"></div><div id="sndOpts"></div></div>
+    <div class="sec" data-tab="view"><h3>Cámara y pantalla</h3><div id="viewOpts"></div></div>
+    <div class="sec" data-tab="drive"><h3>Controles</h3><div class="keys" style="margin-top:2px">
       <kbd>↑</kbd>/<kbd>W</kbd> acelerar · <kbd>↓</kbd>/<kbd>S</kbd> frenar · <kbd>←</kbd><kbd>→</kbd>/<kbd>A</kbd><kbd>D</kbd> girar (gira menos cuanto más rápido vas)<br>
       <kbd>Mayús</kbd>/<kbd>E</kbd> KERS · <kbd>F</kbd> abrir DRS · <kbd>Q</kbd> modo de motor (ahorro / normal / ataque) · <kbd>B</kbd> boxes · <kbd>1</kbd>–<kbd>5</kbd> neumático para la parada · <kbd>C</kbd> cámara · <kbd>T</kbd> repetición · <kbd>G</kbd> fantasma · <kbd>V</kbd> voz de radio · <kbd>M</kbd> sonido · <kbd>P</kbd>/<kbd>Esc</kbd> pausa</div></div>
     <button class="go" id="setBack">Volver</button>
