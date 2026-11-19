@@ -1269,10 +1269,11 @@ function fxFrame(dt){
     const sp=Math.hypot(c.vx,c.vy);
     {const sp=Math.hypot(c.vx,c.vy); // chasis roto arrastrándose por el asfalto, o suspensión rota rozando: chispas
       if(sp>50&&paved(c.surf)&&((c.wrecked&&!c.gone)||(!c.dnf&&c.dSusp>0.6&&sp>150))&&Math.random()<(c.wrecked?0.9:0.35)){const n=c.wrecked?3:1;for(let i=0;i<n;i++)spawn(c.x-Math.cos(c.a)*8+(Math.random()-0.5)*8,c.y-Math.sin(c.a)*8+(Math.random()-0.5)*8,-c.vx*0.25+(Math.random()-0.5)*90,-c.vy*0.25+(Math.random()-0.5)*90,0.2+Math.random()*0.3,1+Math.random(),'spark');}}
-    if(c.wrecked&&!c.gone&&c.fire&&R.t<c.fire&&Math.random()<0.8){const p=spawn(c.x+(Math.random()-0.5)*10,c.y+(Math.random()-0.5)*10,(Math.random()-0.5)*20,(Math.random()-0.5)*20,0.35+Math.random()*0.3,2.2,'spark');}
+    if((c.wrecked||c.engFire)&&!c.gone&&c.fire&&R.t<c.fire&&Math.random()<0.8){const p=spawn(c.x+(Math.random()-0.5)*10,c.y+(Math.random()-0.5)*10,(Math.random()-0.5)*20,(Math.random()-0.5)*20,0.35+Math.random()*0.3,2.2,'spark');}
     // v45: fuego de verdad (llamas que suben y parpadean) y columna de humo negro que el viento arrastra
-    if(c.wrecked&&!c.gone&&c.fire&&R.t<c.fire){const fx=Math.cos(c.a),fy=Math.sin(c.a);
-      for(let k=0;k<3;k++){const q=spawn(c.x-fx*6+(Math.random()-0.5)*14,c.y-fy*6+(Math.random()-0.5)*10,(Math.random()-0.5)*18+12,(Math.random()-0.5)*18-16,0.35+Math.random()*0.4,3+Math.random()*3.5,'flame');q.grow=-4;}
+    if((c.wrecked||c.engFire)&&!c.gone&&c.fire&&R.t<c.fire){const fx=Math.cos(c.a),fy=Math.sin(c.a),age=c.wrecked?R.t-c.wreckT:9,hot=c.engFire&&!c.wrecked?0.8:age<4?1.6:1,bk=c.engFire&&!c.wrecked?14:6,sz=c.engFire&&!c.wrecked?6:14;
+      /* v53: llamas más grandes al principio; con el motor ardiendo salen de la tapa del motor y el aire de la marcha las tumba hacia atrás */
+      for(let k=0;k<Math.round(3*hot);k++){const q=spawn(c.x-fx*bk+(Math.random()-0.5)*sz,c.y-fy*bk+(Math.random()-0.5)*sz*0.7,(Math.random()-0.5)*18+12-c.vx*0.25,(Math.random()-0.5)*18-16-c.vy*0.25,0.35+Math.random()*0.4,(3+Math.random()*3.5)*(0.8+0.4*hot),'flame');q.grow=-4;}
       if(Math.random()<0.7){const q=spawn(c.x+(Math.random()-0.5)*10,c.y+(Math.random()-0.5)*10,22+(Math.random()-0.5)*14,-14+(Math.random()-0.5)*14,2.8+Math.random()*2.2,6,'bsmoke');q.grow=20;}}
     // v45: chasis arrastrándose: deja arañazos en el asfalto
     if(c.wrecked&&!c.gone&&paved(c.surf)&&Math.hypot(c.vx,c.vy)>40){const L=c._gl;if(L&&Math.hypot(c.x-L[0],c.y-L[1])>6){GOUGES.push([L[0],L[1],c.x,c.y]);if(GOUGES.length>500)GOUGES.shift();c._gl=[c.x,c.y];}else if(!L)c._gl=[c.x,c.y];}
@@ -1321,13 +1322,17 @@ function fxFrame(dt){
       sparkBurst(ev.x,ev.y,Math.round(60*big),ev.vx*0.3||0,ev.vy*0.3||0,520);
       // fogonazo, nube de tierra/grava si es fuera de pista y una estela de piezas pequeñas en la dirección del golpe
       {const f=spawn(ev.x,ev.y,0,0,0.22,26*big,'flash');}
+      if(ev.car&&ev.car.fireBall){/* v53: bola de fuego: fogonazo grande, llamas que se abren y humo negro */spawn(ev.x,ev.y,0,0,0.45,60*big,'flash');
+        for(let i=0;i<Math.round(34*big);i++){const a=Math.random()*6.28,sp=30+Math.random()*150;const q=spawn(ev.x,ev.y,Math.cos(a)*sp+(ev.vx||0)*0.3,Math.sin(a)*sp+(ev.vy||0)*0.3,0.5+Math.random()*0.6,6+Math.random()*9,'flame');q.grow=6;}
+        for(let i=0;i<10;i++){const a=Math.random()*6.28,q=spawn(ev.x,ev.y,Math.cos(a)*50,Math.sin(a)*50-10,3+Math.random()*2,10,'bsmoke');q.grow=30;}
+        if(!attract&&Math.hypot(ev.x-R.player.x,ev.y-R.player.y)<1200)setTimeout(()=>{audioThud(420);audioCrowd(0.9,'gasp');},120);}
       for(let i=0;i<Math.round(14*big);i++){const a=Math.random()*6.28,sp=40+Math.random()*160;const p=spawn(ev.x,ev.y,Math.cos(a)*sp+(ev.vx||0)*0.25,Math.sin(a)*sp+(ev.vy||0)*0.25,1.6+Math.random()*1.6,7+Math.random()*7,dirt?'dirtcloud':'dust');p.grow=30;}
       if(dirt)for(let i=0;i<Math.round(40*big);i++){const a=Math.random()*6.28,sp=60+Math.random()*260;spawn(ev.x,ev.y,Math.cos(a)*sp+(ev.vx||0)*0.4,Math.sin(a)*sp+(ev.vy||0)*0.4,0.6+Math.random()*0.8,1.5+Math.random()*2,'gravel');}
       for(let i=0;i<8;i++){const p=spawn(ev.x+(Math.random()-0.5)*14,ev.y+(Math.random()-0.5)*14,(Math.random()-0.5)*60,(Math.random()-0.5)*60,2.5,9,'smoke');p.grow=26;}
       if(!attract&&settings.autoRep&&!ui.replay)ui.autoRep={t:3.4,car:R.cars.indexOf(ev.car),x:ev.x,y:ev.y};
       if(!attract){const near=Math.hypot(ev.x-R.player.x,ev.y-R.player.y);if(ev.car.isPlayer){cam.shake=16;vib([90,50,160]);flash('¡Accidente!','Coche destrozado · fuera de carrera',3);radioSay('¿Estás bien? Coche roto, se acabó. Vuelve al box andando.',null,0,true);}
         else{if(near<900)cam.shake=Math.max(cam.shake,6);radioSay('Accidente fuerte de '+ev.car.name+'. Cuidado, hay restos en pista.','wr_'+ev.car.id,30,true);}}}
-    else if(ev.type==='incident'&&!attract&&ev.car&&!ev.car.isPlayer){const n=ev.car.name,m={wide:n+' se ha pasado de frenada y se va largo.',spin:'¡Trompo de '+n+'!',crash:n+' ha perdido el coche en curva rápida.',brakes:n+' se ha quedado sin frenos.',engine:'Avería de motor para '+n+'. Fuera.',hydraulics:n+' tiene un fallo hidráulico, abandona.',lock:ev.by&&ev.by.isPlayer?'¡'+n+' bloquea! Le estás metiendo presión, se pasa de frenada.':'¡'+n+' bloquea ruedas y se pasa de frenada!'}[ev.kind];
+    else if(ev.type==='incident'&&!attract&&ev.car&&!ev.car.isPlayer){const n=ev.car.name,m={wide:n+' se ha pasado de frenada y se va largo.',spin:'¡Trompo de '+n+'!',crash:n+' ha perdido el coche en curva rápida.',brakes:n+' se ha quedado sin frenos.',engine:ev.fire?'¡Fuego en el coche de '+n+'! Revienta el motor y abandona.':'Avería de motor para '+n+'. Fuera.',hydraulics:n+' tiene un fallo hidráulico, abandona.',lock:ev.by&&ev.by.isPlayer?'¡'+n+' bloquea! Le estás metiendo presión, se pasa de frenada.':'¡'+n+' bloquea ruedas y se pasa de frenada!'}[ev.kind];
       const near=Math.abs(R.player.prog-ev.car.prog)<R.tr.N*0.25;if(m&&(near||(ev.kind!=='wide'&&ev.kind!=='lock')))radioSay(m+(near&&ev.kind!=='engine'&&ev.kind!=='hydraulics'&&!(ev.kind==='lock'&&ev.by&&ev.by.isPlayer)?' Atento, lo tienes cerca.':''),'inc_'+ev.car.id,15);}
     else if(ev.type==='launch'&&!attract&&ev.car.isPlayer){const m={perfect:['¡Salida perfecta!','Así se hace.'],good:['Buena salida',''],bog:['Te has quedado corto de vueltas','El motor se ahoga'],spin:['¡Patinas!','Demasiadas vueltas'],bigspin:['¡Patinazo enorme!','Demasiadas vueltas'],stall:['¡CALADO!','Muy pocas vueltas']}[ev.kind];
       flash(m[0],m[1],1.8);radioSay({perfect:'Salida perfecta, bien hecho.',good:'Buena salida.',bog:'Salida lenta, nos han pasado coches.',spin:'Has patinado en la salida. Menos vueltas la próxima.',bigspin:'Mucho patinaje en la salida. Busca la zona verde.',stall:'¡Te has calado! Arranca, arranca.'}[ev.kind],'launch',5,true);}
@@ -1360,8 +1365,10 @@ function fxFrame(dt){
       if(ev.type==='lap'){if(ghostLapDone(ev.time)&&R.mode==='quali')radioSay('Nueva mejor vuelta. El fantasma se actualiza.','gh',10);radioLap(ev.car);const rec=ui.record==null||ev.time<ui.record;flash(fmt(ev.time),rec?'¡Récord del circuito!':'Vuelta '+(ev.car.lap-1),2);}
       if(ev.type==='pitenter'){flash('Pit lane','Limitador automático · tu box se marca en amarillo',1.8);radioSay('Entras en boxes. Preparamos '+COMPOUNDS[ev.car.nextCompound].name.toLowerCase()+'.','pin',5,true);}
       if(ev.type==='pitmiss'){flash('Te has pasado la entrada','Seguimos fuera · BOX sigue pedido para la próxima vuelta',2);radioSay('Te has pasado la entrada a boxes. Lo intentamos la próxima vuelta.','pmiss',5,true);}
-      if(ev.type==='pitstop'){radioSay('Parada limpia. '+COMPOUNDS[ev.car.nextCompound].name+(ev.car.fuelAdd>1?' y '+Math.round(ev.car.fuelAdd)+' litros':'')+'. Ruedas frías al salir.','pit',20);}
-      if(ev.type==='pitstop')flash('Parada en boxes',`${COMPOUNDS[ev.car.nextCompound].name} · +${Math.round(ev.car.fuelAdd)} L`,1.6);
+      if(ev.type==='pitstop'&&ev.car.pitFail){const F=ev.car.pitFail;radioSay(F.k==='nut'?'¡Problema con la tuerca '+F.w+'! Espera, espera…':F.k==='jack'?'¡El gato ha fallado! Cambiamos de gato…':F.k==='fuel'?'La manguera no engancha… espera.':F.k==='unsafe'?'Ojo, salida insegura: nos van a sancionar, cinco segundos.':'Parada hecha. ¡Vamos!','pit',20);}
+      else if(ev.type==='pitstop'){radioSay('Parada limpia. '+COMPOUNDS[ev.car.nextCompound].name+(ev.car.fuelAdd>1?' y '+Math.round(ev.car.fuelAdd)+' litros':'')+'. Ruedas frías al salir.','pit',20);}
+      if(ev.type==='pitstop'&&ev.car.pitFail&&ev.car.pitFail.k!=='loose')flash(ev.car.pitFail.k==='unsafe'?'Salida insegura · +5 s':'Parada lenta',ev.car.pitFail.x?'+'+ev.car.pitFail.x.toFixed(1).replace('.',',')+' s':'',2);
+      else if(ev.type==='pitstop')flash('Parada en boxes',`${COMPOUNDS[ev.car.nextCompound].name} · +${Math.round(ev.car.fuelAdd)} L`,1.6);
       if(ev.type==='pitdone')flash('¡Vamos, vamos!','',1);
       if(ev.type==='dnf')flash('Sin gasolina','Abandono',3);
       if(ev.type==='limits')radioSay('Cuidado con los límites de pista. Llevas '+ev.n+(ev.n>=3?', ya nos han penalizado.':' de 3 avisos.'),'lim',5);
@@ -1429,7 +1436,7 @@ function drawPerson(o){
 // Cuando el chasis se para, dos comisarios salen corriendo desde fuera de la pista; si arde, uno lo apaga con el extintor.
 function marshalUpdate(dt){
   if(!R||attract)return;R._msh=R._msh||[];const tr=R.tr;
-  for(const c of R.cars){if(!c.wrecked||c.gone||c._msh)continue;if(Math.hypot(c.vx,c.vy)>25||R.t-(c.wreckT||0)<1.2)continue;c._msh=true;
+  for(const c of R.cars){if(!(c.wrecked||(c.engFire&&c.dnf))||c.gone||c._msh)continue;if(Math.hypot(c.vx,c.vy)>25||R.t-(c.wreckT||0)<1.2)continue;c._msh=true;
     const i=c.idx,side=Math.sign(c.lat)||1,lat0=side*Math.max(Math.abs(c.lat)+70,W+KERB+50);
     for(let k=0;k<2;k++){const j=(i+(k?-7:7)+tr.N)%tr.N,x=tr.xs[j]+tr.nx[j]*lat0,y=tr.ys[j]+tr.ny[j]*lat0;
       const tx=c.x+tr.nx[i]*side*13+tr.tx[i]*(k?-11:11),ty=c.y+tr.ny[i]*side*13+tr.ty[i]*(k?-11:11);
@@ -1721,6 +1728,7 @@ function radioThink(){ // se llama 2 veces por segundo durante la carrera
   {const rv=ui.rv||(ui.rv={pit:{},fl:null,out:{}});
     for(let k=Math.max(0,pos-2);k<=Math.min(st.length-1,pos+2);k++){const o=st[k];if(o===p)continue;
       if(o.pit==='in'&&!rv.pit[o.id]){rv.pit[o.id]=true;radioSay(o.name+' entra en boxes'+(k<pos?', el que tienes delante.':'.')+(k===pos+1?' Aprieta ahora.':''),'rp_'+o.id+'_'+o.stops,20);}
+      if(!rv.pf)rv.pf={};if(o.pit==='service'&&o.pitFail&&o.pitFail.x>2.5&&!rv.pf[o.id+'_'+o.stops]){rv.pf[o.id+'_'+o.stops]=true;radioSay('Parada lenta de '+o.name+'. ¡Es tu oportunidad!','rpf_'+o.id,15);}
       if(!o.pit&&rv.pit[o.id])rv.pit[o.id]=false;}
     let fl=null;for(const o of R.cars)if(o.bestLap&&(!fl||o.bestLap<fl.bestLap))fl=o;
     if(fl&&fl!==p&&p.lap>=3&&(!rv.fl||fl.bestLap<rv.fl-0.05)){rv.fl=fl.bestLap;radioSay('Vuelta rápida de '+fl.name+': '+fmt(fl.bestLap)+'.','fl',25);}else if(fl)rv.fl=Math.min(rv.fl||1e9,fl.bestLap);
@@ -1867,7 +1875,8 @@ function carSprite(c){
 const REALSPR={};
 function realCar(c){
   // v44: nw = sin alerón delantero, nr = sin alerón trasero, wo = rueda arrancada (0 del. izq., 1 del. dcha., 2 tras. izq., 3 tras. dcha.)
-  const nw=c.dWing>0.6,nr=!!c.rwOff,wo=c.wheelOff,wf=c.wOff?c.wOff.map(b=>b?1:0).join(''):'',key=c.color+c.color2+'L'+(c.livery||0)+(c.isPlayer?'P':(c.slot%2))+c.compound+(nw?'w':'')+(nr?'r':'')+(wo!=null?'o'+wo:'')+wf+(c.drsOpen?'d':'');
+  /* v53: daños por niveles: fw/rr 0 sano, 1 sin placa y doblado, 2 media ala rota, 3 arrancado; sc arañazos y fibra a la vista en el lado del golpe */
+  const nw=c.dWing>0.6,nr=!!c.rwOff,fw=nw?3:c.dWing>0.35?2:c.dWing>0.15?1:0,rr=nr?3:c.dRear>0.6?2:c.dRear>0.3?1:0,mx=Math.max(c.dWing||0,c.dRear||0,c.dSusp||0),sc=c.wrecked?0:mx>0.6?2:mx>0.25?1:0,ds=(c.suspSide||1)>0?1:-1,wo=c.wheelOff,wf=c.wOff?c.wOff.map(b=>b?1:0).join(''):'',key=c.color+c.color2+'L'+(c.livery||0)+(c.isPlayer?'P':(c.slot%2))+c.compound+'f'+fw+'b'+rr+'s'+sc+ds+(wo!=null?'o'+wo:'')+wf+(c.drsOpen?'d':'');
   if(REALSPR[key])return REALSPR[key];
   const S=8,o=document.createElement('canvas');o.width=DW*S;o.height=DH*S;const g=o.getContext('2d');
   g.scale(S,S);g.translate(DW/2,DH/2);g.lineJoin='round';g.lineCap='round';
@@ -1893,15 +1902,25 @@ function realCar(c){
   g.fillStyle=carb;P(mir([[9.5,1.6],[7.5,5.4],[2,6.6],[-6,6.6],[-8.6,4.4],[-13.4,3.6],[-15.8,2.6]]));g.fill();
   g.strokeStyle='rgba(255,255,255,.08)';g.lineWidth=0.25;g.stroke();
   // alerón delantero: tres perfiles, placas laterales
-  if(!nw){g.fillStyle=carb2;P(mir([[19.2,0.9],[19.3,6.6],[17.4,6.8],[16.6,5.2],[17.2,1.2]]));g.fill();
-    g.strokeStyle=shade(col,0.15);g.lineWidth=0.32;for(const k of [0,0.7,1.4]){g.beginPath();g.moveTo(18.6-k,1.1);g.quadraticCurveTo(18.2-k,4,17.6-k*0.6,6.5);g.moveTo(18.6-k,-1.1);g.quadraticCurveTo(18.2-k,-4,17.6-k*0.6,-6.5);g.stroke();}
-    g.fillStyle=c2;g.fillRect(16.9,6.2,2.5,0.55);g.fillRect(16.9,-6.75,2.5,0.55);}
+  if(fw<3){for(const sy of [-1,1]){const dm=sy===ds?fw:0;
+      if(dm>=2){g.fillStyle=carb2;P([[19.2,sy*0.9],[19.0,sy*2.2],[18.4,sy*1.6],[17.9,sy*2.6],[17.4,sy*1.7],[17.2,sy*1.2]]);g.fill(); // muñón dentado: esta mitad se ha roto
+        g.strokeStyle='rgba(200,200,200,.5)';g.lineWidth=0.12;g.beginPath();g.moveTo(19,sy*2.1);g.lineTo(18.4,sy*1.6);g.lineTo(17.9,sy*2.5);g.stroke();continue;}
+      const bn=dm===1?1:0; // doblado hacia atrás
+      g.fillStyle=carb2;P([[19.2,sy*0.9],[19.3-bn*0.9,sy*(6.6-bn*0.6)],[17.4-bn*1.3,sy*(6.8-bn*0.5)],[16.6-bn*0.8,sy*5.2],[17.2,sy*1.2]]);g.fill();
+      g.strokeStyle=shade(col,0.15);g.lineWidth=0.32;for(const k of [0,0.7,1.4]){g.beginPath();g.moveTo(18.6-k,sy*1.1);g.quadraticCurveTo(18.2-k-bn*0.4,sy*4,17.6-k*0.6-bn*1.1,sy*(6.5-bn*0.5));g.stroke();}
+      if(!bn){g.fillStyle=c2;g.fillRect(16.9,sy>0?6.2:-6.75,2.5,0.55);}
+      else{g.strokeStyle='rgba(220,220,220,.6)';g.lineWidth=0.12;g.beginPath();g.moveTo(18.9,sy*3.2);g.lineTo(18.1,sy*3.9);g.lineTo(18.5,sy*4.6);g.stroke();}}}
+  else{g.fillStyle=carb;P([[17,-1.4],[18.7,-1.3],[18.1,-0.6],[19.0,0],[18.2,0.7],[18.6,1.3],[17,1.4]]);g.fill(); // muñón del alerón delantero arrancado
+    g.strokeStyle='rgba(200,200,200,.45)';g.lineWidth=0.12;g.beginPath();g.moveTo(18.7,-1.3);g.lineTo(18.1,-0.6);g.lineTo(19,0);g.lineTo(18.2,0.7);g.stroke();}
   // alerón trasero con placas y flap (DRS)
-  else{g.fillStyle=carb;g.fillRect(17,-1.4,1.2,2.8);} // muñón del alerón delantero arrancado
+  if(rr===2){g.save();P([[-25,-ds*9],[-12,-ds*9],[-12,ds*0.8],[-15.2,ds*1.5],[-16.1,ds*0.4],[-17.2,ds*1.7],[-18.2,ds*0.6],[-25,ds*1.2]]);g.clip();}
   if(!nr){g.fillStyle=carb2;P([[-15.7,-3.9],[-15.7,3.9],[-18.6,3.9],[-18.6,-3.9]]);g.fill();
     const rg=g.createLinearGradient(-18.6,0,-15.7,0);rg.addColorStop(0,shade(col,-0.35));rg.addColorStop(1,shade(col,0.1));g.fillStyle=rg;if(c.drsOpen){ /* v45: DRS abierto: el flap se levanta y deja un hueco oscuro */ g.fillRect(-18.2,-3.6,1.1,7.2);g.fillStyle='#050608';g.fillRect(-17.1,-3.6,0.7,7.2);g.fillStyle=shade(col,0.25);g.fillRect(-16.4,-3.6,0.45,7.2);}else{g.fillRect(-18.2,-3.6,2.2,7.2);
     g.strokeStyle='rgba(0,0,0,.5)';g.lineWidth=0.25;g.beginPath();g.moveTo(-17.1,-3.6);g.lineTo(-17.1,3.6);g.stroke();}
-    g.fillStyle=c2;g.fillRect(-18.8,-4.25,3.4,0.6);g.fillRect(-18.8,3.65,3.4,0.6);}
+    g.fillStyle=c2;if(!(rr>=1&&ds<0))g.fillRect(-18.8,-4.25,3.4,0.6);if(!(rr>=1&&ds>0))g.fillRect(-18.8,3.65,3.4,0.6);
+    if(rr===1){g.strokeStyle='rgba(220,220,220,.55)';g.lineWidth=0.12;g.beginPath();g.moveTo(-16,ds*2.2);g.lineTo(-16.9,ds*2.8);g.lineTo(-16.5,ds*3.5);g.lineTo(-17.6,ds*3.9);g.stroke();}}
+  if(rr===2){g.restore();g.strokeStyle='rgba(200,200,200,.5)';g.lineWidth=0.12;g.beginPath();g.moveTo(-15.2,ds*1.5);g.lineTo(-16.1,ds*0.4);g.lineTo(-17.2,ds*1.7);g.lineTo(-18.2,ds*0.6);g.stroke();}
+  if(nr){g.fillStyle=carb;P([[-15.6,-1],[-17.2,-0.8],[-16.6,-0.2],[-17.4,0.5],[-15.6,1]]);g.fill();} // soporte del alerón trasero arrancado
   // carrocería: morro fino, cockpit, pontones anchos con "botella de coca-cola" hacia atrás
   const body=mir([[19,0.35],[16,0.75],[11.5,1.25],[7.2,1.7],[5.6,2.1],[4.4,4.6],[3.2,5.6],[1,5.8],[-2.5,5.5],[-5.5,4.6],[-8.5,3.1],[-11.5,2.1],[-14.6,1.55],[-16,1.2]]);
   const bg=g.createLinearGradient(0,-6,0,6);bg.addColorStop(0,shade(col,-0.42));bg.addColorStop(0.22,shade(col,-0.05));bg.addColorStop(0.45,shade(col,0.22));bg.addColorStop(0.55,shade(col,0.12));bg.addColorStop(0.8,shade(col,-0.12));bg.addColorStop(1,shade(col,-0.5));
@@ -1916,6 +1935,12 @@ function realCar(c){
     else if(L===6){for(const x0 of [12,8.5,5])P([[x0,0],[x0-3.5,-6],[x0-5,-6],[x0-1.5,0],[x0-5,6],[x0-3.5,6]]),g.fill();}
     const ov=g.createLinearGradient(0,-6,0,6);ov.addColorStop(0,'rgba(0,0,0,.4)');ov.addColorStop(0.45,'rgba(255,255,255,.12)');ov.addColorStop(0.55,'rgba(255,255,255,.05)');ov.addColorStop(1,'rgba(0,0,0,.4)');g.fillStyle=ov;g.fillRect(-17,-7,37,14);g.restore();}
   P(body);g.strokeStyle='rgba(0,0,0,.45)';g.lineWidth=0.25;g.stroke();
+  if(sc){g.save();P(body);g.clip();const y0=ds*5.2;
+    g.fillStyle='#16181b';P([[2.6,ds*5.9],[0.4,ds*4.6],[-1.6,ds*5.3],[-0.4,ds*6.2]]);g.fill(); // fibra de carbono a la vista
+    g.strokeStyle='rgba(235,235,235,.55)';g.lineWidth=0.14;g.beginPath();for(let k=0;k<(sc>1?7:4);k++){const x=3-k*1.6,y=y0-ds*(0.2+0.25*(k%3));g.moveTo(x,y);g.lineTo(x-2.2,y+ds*0.35);}g.stroke();
+    if(sc>1){g.fillStyle='#16181b';P([[-9,ds*2.9],[-11.2,ds*1.8],[-12.6,ds*2.4],[-11,ds*3.1]]);g.fill();P([[13.5,ds*0.9],[11.5,ds*1.3],[12.4,ds*0.5]]);g.fill();
+      g.strokeStyle='rgba(0,0,0,.6)';g.lineWidth=0.18;g.beginPath();g.moveTo(-2,ds*0.9);g.lineTo(-4.5,ds*0.3);g.lineTo(-6,ds*1.1);g.lineTo(-8.5,ds*0.4);g.stroke();}
+    g.restore();}
   // rampa de los pontones (sombreado) y entradas de aire
   for(const sy of [-1,1]){const sg=g.createLinearGradient(0,sy*2,0,sy*5.8);sg.addColorStop(0,'rgba(0,0,0,0)');sg.addColorStop(1,'rgba(0,0,0,.35)');g.fillStyle=sg;P([[2.6,sy*2.6],[0.5,sy*5.4],[-5,sy*4.4],[-8.5,sy*2.6]]);g.fill();
     g.fillStyle='#0b0c0e';P([[4.25,sy*2.45],[3.6,sy*4.9],[3.0,sy*5.0],[3.4,sy*2.5]]);g.fill();
@@ -1974,8 +1999,11 @@ function drawCar(c0){
     ctx.globalCompositeOperation='source-over';}
   const rx=-DW/2+0.4;
   if(c.brake>0.2&&Math.hypot(c.vx,c.vy)>20){ctx.fillStyle='#ff2a1a';ctx.fillRect(rx,-0.9,1.2,1.8);ctx.fillStyle='rgba(255,40,20,.35)';ctx.beginPath();ctx.arc(rx-0.4,0,2.6,0,Math.PI*2);ctx.fill();}
-  if(!c.wrecked&&c.dWing>0.25&&c.dWing<=0.6){ // alerón colgando, arrastra
-    const sw=Math.sin(performance.now()/90+c.slot)*0.08;ctx.save();ctx.translate(DW/2-1,(c.suspSide||1)*3);ctx.rotate(0.35*(c.suspSide||1)+sw);ctx.fillStyle='#1a1a1a';ctx.fillRect(-1,-6,2.4,12);ctx.fillStyle=c.color2;ctx.fillRect(-0.4,-5.4,1.2,10.8);ctx.restore();}
+  if(!c.wrecked&&c.dWing>0.35&&c.dWing<=0.6){ // v53: media ala rota que cuelga y arrastra por el suelo, bailando
+    const sd=(c.suspSide||1)>0?1:-1,sw=Math.sin(performance.now()/70+c.slot)*0.12+Math.sin(performance.now()/23)*0.04;ctx.save();ctx.translate(DW/2-2.2,sd*1.8);ctx.rotate(sd*(0.55+sw));
+    ctx.fillStyle='#1d1f23';ctx.beginPath();ctx.moveTo(-1.2,0);ctx.lineTo(1.4,0.3);ctx.lineTo(1.0,sd*5.6);ctx.lineTo(-1.6,sd*5.8);ctx.closePath();ctx.fill();
+    ctx.strokeStyle=c.color;ctx.lineWidth=0.3;ctx.beginPath();ctx.moveTo(0.8,sd*0.4);ctx.lineTo(0.5,sd*5.4);ctx.moveTo(0,sd*0.4);ctx.lineTo(-0.3,sd*5.5);ctx.stroke();
+    ctx.fillStyle=c.color2;ctx.fillRect(-1.8,sd>0?5.4:-6,2.9,0.6);ctx.restore();}
   if(c.punct&&!c.wrecked&&c.wheelOff==null){const sd=c.suspSide||1;ctx.fillStyle='#0b0b0b';ctx.fillRect(-13,sd*5.5-1.5,6,3);ctx.fillStyle='#9a9a9a';ctx.beginPath();ctx.arc(-10,sd*6.5,1.1,0,7);ctx.fill();}
   if(!c.wrecked&&c.dSusp>0.45){ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(8,(c.suspSide||1)*6-1,5,2);}
   if(c.wrecked){ // v45: chasis quemado y roto: manchas negras, fibra de carbono a la vista y grietas

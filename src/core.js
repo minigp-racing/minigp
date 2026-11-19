@@ -288,8 +288,48 @@ function rainAt(Wt,x,y,zone){
 function wetNeed(R,c){if(!R.weather||R.weather.type==='dry')return 0;const lap=(c&&c.lastLap)||(R.est&&R.est.lap)||90;
   const now=Math.max(R.meanWet||0,0.8*((c&&c.wetFelt)||0)),f=(forecastWet(R,[lap*0.3])+forecastWet(R,[lap*0.7])+forecastWet(R,[lap*1.1]))/3;
   return 0.35*now+0.65*f;} // lo que importa es el agua que habrá durante el próximo stint, no la de este instante
-function compoundFor(R,c,k){const w=wetNeed(R,c);if(w>0.58)return 'W';if(w>0.17)return COMPOUNDS[k].wet?k:'I';
-  if(COMPOUNDS[k].wet&&w<0.07)return chooseCompound(Math.max(1,lapsLeft(R,c)-1),R.est,Math.random());return k;}
+/* v53: estrategia en tiempo variable por TIEMPO previsto, no por umbrales de agua.
+   wxPlan: agua media que habrá en la pista (radar + secado/encharcado) cada 10 s durante ~3 vueltas (compartida, se recalcula cada 4 s).
+   wxStint: segundos que se pierden con una goma durante el resto de la carrera; parar compensa si lo ganado supera la parada.
+   Así, quien va con lluvia en un chaparrón que se acaba no para si quedan pocas vueltas o si la pista sigue mojada lo bastante. */
+let WXGAIN=3,WXK=0.55;
+function wxPlan(R){const Wt=R.weather;if(R.wxP&&Math.abs(R.wxP.t-Wt.t)<4)return R.wxP;
+  const lap=(R.est&&R.est.lap)||90,st=10,H=Math.max(200,lap*3.2);let w=R.meanWet||0,tg=w;const a=[w];
+  for(let t=st,i=1;t<=H;t+=st,i++){if(i%2===1)tg=forecastWet(R,[t]);w=clamp(w+(tg-w)*(tg>w?0.07:0.016)*st,0,1);a.push(w);}
+  return R.wxP={t:Wt.t,st,a};}
+function wxAt(P,t){const i=Math.max(0,Math.round(t/P.st));return P.a[Math.min(i,P.a.length-1)];}
+function wxRisk(c){const T=c.traits||{},st=T.style;if(c.wxRisk==null)c.wxRisk=(st==='cuidadoso'?1.4:st==='metronomo'?1.2:st==='agresivo'?0.7:st==='irregular'?0.8:1)*(0.85+Math.random()*0.3);return c.wxRisk;}
+function wxLapK(comp,w,wear,risk){const C=COMPOUNDS[comp],gw=wear<0.75?1-0.12*wear:Math.max(0.68,0.91-1.25*(wear-0.75));
+  let k=WXK*(1/Math.sqrt(C.grip*wetFactor(comp,w)*gw)-1);
+  if(!C.wet)k+=risk*0.12*Math.max(0,w-0.25)/0.75;          // lisos con agua: aquaplaning y salidas
+  else if(comp==='I')k+=risk*0.05*Math.max(0,w-0.6)/0.4;   // intermedios encharcados
+  else k+=0.025*Math.max(0,0.15-w)/0.15;                   // lluvia en seco: se destrozan
+  return k;}
+function wxBase(R){return (R.est&&R.est.lap)||90;}
+function wxLine(R,c){const m=R.meanWet||0;return clamp(((c.wetFelt!=null?c.wetFelt:m)+0.02)/(m+0.02),0.4,1.2);} // la trazada se seca antes que la media
+function wxStint(R,c,comp,wear0,from,laps){const P=wxPlan(R),base=wxBase(R),lf=wxLine(R,c),risk=wxRisk(c),wpl=((R.est&&R.est.wear)||0.05)*COMPOUNDS[comp].wear;
+  let sum=0,wr=wear0;for(let j=0;j<laps;j++){const w=clamp(wxAt(P,from+(j+0.5)*base)*lf,0,1);sum+=base*wxLapK(comp,w,wr,risk);wr+=wpl;}return sum;}
+function wxPitLoss(R){const tr=R.tr,base=wxBase(R),len=(2*PITL+2*PITE-10)*tr.sp,avg=Math.max(250,tr.len/base);
+  return (len/PIT_V-len/avg+6.6)*(R.sc&&R.sc.phase!=='gone'?0.45:1);} // con safety car parar cuesta la mitad
+function wxDry(R,c,laps){return COMPOUNDS[c.nextCompound]&&!COMPOUNDS[c.nextCompound].wet?c.nextCompound:chooseCompound(Math.max(1,laps),R.est,0.5);}
+// mejor goma para lo que queda (se usa al parar y para el consejo del ingeniero)
+function compoundFor(R,c,k){if(!R.weather||R.weather.type==='dry')return k;
+  const laps=Math.max(1,lapsLeft(R,c)-1);let best=k,bc=1e9;
+  for(const nc of [COMPOUNDS[k].wet?chooseCompound(laps,R.est,0.5):k,'I','W']){const v=wxStint(R,c,nc,0,0,laps);if(v<bc-0.01){bc=v;best=nc;}}
+  return best;}
+/* decisión de parar por el tiempo: compara seguir con la goma actual hasta el final contra parar al final de esta vuelta */
+function wxDecide(R,c){const laps=lapsLeft(R,c)-1;if(laps<1)return null;const base=wxBase(R),off=(1-c.idx/R.tr.N)*base;
+  const stay=wxStint(R,c,c.compound,c.wear,off,laps);let best=null,bc=1e9;
+  for(const nc of [wxDry(R,c,laps),'I','W']){if(nc===c.compound)continue;const v=wxStint(R,c,nc,0,off,laps);if(v<bc){bc=v;best=nc;}}
+  // perder puestos en pista también cuenta un poco (más para los prudentes)
+  let behind=0;const loss=wxPitLoss(R);if(R.standings){const i=R.standings.indexOf(c);for(let j=i+1;j<R.standings.length&&j<i+6;j++){const o=R.standings[j];if(o.dnf||o.finished)continue;const g=gapBehind(R,c,o);if(g!=null&&g<loss)behind++;}}
+  return {stay,best,cost:bc+loss+behind*0.6*wxRisk(c),loss};}
+function gapBehind(R,a,b){const tr=R.tr,da=(a.lap*tr.N+a.idx)-(b.lap*tr.N+b.idx);if(da<0)return null;const v=Math.max(150,Math.hypot(b.vx,b.vy));return da*tr.sp/v;}
+function wxStrategy(R,c){const d=wxDecide(R,c);if(!d)return;
+  c.wxGain=d.stay-d.cost; // para pruebas
+  if(c.pitReq&&!c.rainCall)return; // ya para por otra cosa: la goma la elige compoundFor al llegar
+  if(d.stay-d.cost>WXGAIN){if(!c.pitReq||c.nextCompound!==d.best){c.pitReq=true;c.rainCall=true;c.nextCompound=d.best;}}
+  else if(c.rainCall&&!c.pit&&d.stay-d.cost<0){c.pitReq=false;c.rainCall=false;}}
 function forecastWet(R,times){const Wt=R.weather,tr=R.tr,t0=Wt.t;let m=0;Wt.fc=t0;
   for(const dt of times){Wt.t=t0+dt;let s=0,n=0;for(let i=0;i<tr.N;i+=6){s+=Math.min(1,rainAt(Wt,tr.xs[i],tr.ys[i],Wt.zoneS[i])*1.35);n++;}m=Math.max(m,s/n);}
   Wt.t=t0;Wt.fc=null;return m;}
@@ -409,8 +449,8 @@ function engineStep(R,c,dt){
   if(c.issue==='oil')wear+=0.010*(c.emode===0&&c.temp<108?0.3:1);
   c.eng=Math.max(0,c.eng-wear*(c.engWear||1)*dt);
   if(c.issue==='brakes')c.brakeFade=Math.min(0.55,c.brakeFade+0.004*(c.emode===0?0.4:1)*dt);
-  if(!c.engineDead&&(c.eng<=0||(c.eng<0.12&&Math.random()<(0.12-c.eng)*0.5*dt))){c.engineDead=true;c.eng=0;
-    if(R.fx)R.events.push({type:c.isPlayer?'damage':'incident',car:c,kind:'engine',msg:c.temp>130?'Motor roto por temperatura':'Avería de motor'});}
+  if(!c.engineDead&&(c.eng<=0||(c.eng<0.12&&Math.random()<(0.12-c.eng)*0.5*dt))){c.engineDead=true;c.eng=0;if(Math.random()<(c.temp>130?0.6:0.3)){c.fire=R.t+9+Math.random()*6;c.engFire=true;}
+    if(R.fx)R.events.push({type:c.isPlayer?'damage':'incident',car:c,kind:'engine',fire:!!c.engFire,msg:c.engFire?'¡Fuego en el motor!':c.temp>130?'Motor roto por temperatura':'Avería de motor'});}
 }
 function makeSession(cfg){
   const tr=buildTrack(cfg.track),cars=[];
@@ -677,6 +717,16 @@ function botControl(R,c,dt){
 // v45: en boxes solo se cambia el morro (opcional, +4 s) y, si se perdió una rueda, se monta otra (+8 s). Suspensión, alerón trasero y motor NO se reparan.
 function serviceTime(c){return 2.2+2.4+c.fuelAdd*0.06+(c.dWing>0.15&&c.fixNose!==false?4:0)+(c.wheelOff!=null?8:0)}
 function serviceTimeT(c){return serviceTime(c)*(c.pitMul||1);}
+/* v53: paradas que salen mal (~7 % de las paradas; con mejores mecánicos en el modo carrera, menos):
+   tuerca atascada (+3-9 s), gato que falla (+2-4 s), manguera de gasolina que no engancha (+2-6 s),
+   salida insegura (+5 s de sanción) o rueda mal apretada que se suelta al poco de salir */
+let PITFAIL=0.07;
+function pitMishap(R,c){const q=PITFAIL*Math.pow(c.pitMul||1,3),r=Math.random();if(r>=q)return;const u=r/q,W4=['delantera izquierda','delantera derecha','trasera izquierda','trasera derecha'];
+  if(u<0.5){const w=(Math.random()*4)|0,x=3+Math.random()*6;c.pitT+=x;c.pitFail={k:'nut',x,w:W4[w]};}
+  else if(u<0.7){const x=2+Math.random()*2;c.pitT+=x;c.pitFail={k:'jack',x};}
+  else if(u<0.84&&c.fuelAdd>3){const x=2+Math.random()*4;c.pitT+=x;c.pitFail={k:'fuel',x};}
+  else if(u<0.94){c.pitFail={k:'unsafe'};c.pen+=5;c.pens=(c.pens||0)+1;}
+  else{const w=(Math.random()*4)|0;c.pitFail={k:'loose',w:W4[w]};c.looseW=w;}}
 // consumo por vuelta realista: lo medido, pero nunca por debajo de lo esperable con el agua actual (en mojado las vueltas son más largas y se gasta más)
 // v45: con una vuelta medida, manda lo medido (+3 % y un poco más si sigue mojado). Antes se tomaba el máximo con una estimación
 // que en mojado subía un 45 %: medido, en mojado se gasta casi lo mismo por vuelta, y los bots paraban a repostar en la vuelta 1 sin necesidad.
@@ -702,6 +752,7 @@ function pitControl(R,c,dt){
     if(c.pitT<=0&&R.liveQ){c.qLaps=0;if(c.bot){const w=R.meanWet||0;c.nextCompound=w>0.62?'W':w>0.2?'I':'S';}}
     if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?50:68;c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;if(c.dWing>0.15&&c.fixNose!==false)c.dWing=0;c.fixNose=null;if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.pittedThisLap=true;c.pit='out';
       // v45: las averías (aceite, frenos) ya no se arreglan en boxes: solo el morro
+      if(c.looseW!=null){c.looseAt=R.t+3+Math.random()*9;}
       if(R.fx)R.events.push({type:'pitdone',car:c});}
     return;
   }
@@ -739,7 +790,7 @@ function pitControl(R,c,dt){
   }
   speedCtl(c,vf,target);
 }
-function startService(R,c,vf){{c.pit='service';c.pitLineX=false;c.rainCall=false;if(c.bot&&R.mode==='race'){const k=compoundFor(R,c,c.nextCompound);if(!(c.rainCall&&k===c.compound))c.nextCompound=k;} /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
+function startService(R,c,vf){{c.pit='service';c.pitLineX=false;c.rainCall=false;if(c.bot&&R.mode==='race'){const k=compoundFor(R,c,c.nextCompound);if(!(c.rainCall&&k===c.compound))c.nextCompound=k;} /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitFail=null;if(R.mode==='race'&&!R.liveQ)pitMishap(R,c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
       if(R.liveQ){c.fuelAdd=0;c.pitReq=false;c.qFly=false;const L=R.liveQ,nx=c.qRuns?c.qRuns[++c.qRun]:null;c.pitT=(!c.bot||L.flag||c.qDone||nx==null)?1e9:Math.max(3,nx-L.t);c.pitTotal=c.pitT;}
       if(R.fx)R.events.push({type:'pitstop',car:c});}
 }
@@ -910,7 +961,8 @@ function physicsSim(R,c,dt){
   c.vx=fx*vf-fy*vl;c.vy=fy*vf+fx*vl;
   c.a+=c.r*dt;c.yaw=c.r;
   c.x+=c.vx*dt;c.y+=c.vy*dt;
-  c.skid=clamp(Math.max((slide-0.09)/0.12,lock?0.7:0),0,1);
+  /* v53: el jugador (teclado/táctil: volante todo o nada) trabaja la goma con más deriva que un bot: el calor por deslizar empieza 0,04 rad más tarde (medido: sus gomas iban 10-20 °C más calientes que las de los bots) */
+  c.skid=clamp(Math.max((slide-0.09-(pl?0.04:0))/0.12,lock?0.7:0),0,1);
   if(c.launchSpin&&R.t<c.launchSpin&&thr>0.5)c.skid=Math.max(c.skid,0.85);
   // v44: lo que se ve y se oye (marcas, humo, chirrido) solo cuando el neumático pasa de verdad de su límite (~9°),
   // no al trabajar normal en curva; c.skid sigue igual para el calor y el desgaste
@@ -1018,18 +1070,7 @@ function rainWant(mw,cur){
 function botStrategy(R,c){
   const left0=lapsLeft(R,c);
   {const fpl=fplOf(R,c),lf0=Math.max(0.2,left0-c.idx/R.tr.N);c.fuelCall=left0>=1&&c.fuel<lf0*fpl+fpl*((R.meanWet||0)>0.08?0.45:0.3)&&c.fuel<fpl*2.4;if(c.fuelCall)c.pitReq=true;}
-  if(R.weather&&R.weather.type!=='dry'&&left0>=1&&!(c.lap<=1&&R.t<60)){ /* v45: en el paso por meta de la salida aún no ha notado la pista: no decide cambios por lluvia */
-    // cada piloto decide con lo que nota en pista y su carácter: unos se arriesgan y esperan, otros cambian antes
-    const T=c.traits||{};if(c.rainBias==null)c.rainBias=(Math.random()-0.5)*0.18+(T.style==='agresivo'||T.style==='irregular'?0.07:T.style==='metronomo'||T.style==='cuidadoso'?-0.05:0);
-    const mw=0.45*(R.meanWet||0)+0.55*(c.wetFelt||0),wet=COMPOUNDS[c.compound].wet;
-    const eff=wet?mw+c.rainBias:mw-c.rainBias; // arriesgado: tarda en poner lluvia y tarda en quitarla
-    const w=rainWant(Math.max(0,eff),c.compound);
-    if(w&&(left0>=2||(!wet&&mw>0.4))){const nc=w==='slick'?(COMPOUNDS[c.nextCompound].wet||!c.pitReq?chooseCompound(left0-1,R.est,Math.random()):c.nextCompound):w;
-      /* v45: mirar la previsión ANTES de parar: si al final se pondría la misma goma que lleva, no merece la pena (antes paraba para nada, W→W) */
-      const fin=compoundFor(R,c,nc);if(fin===c.compound&&!c.fuelCall&&!c.punct&&!(c.dWing>0.4)){if(c.pitReq&&c.rainCall&&!c.pit){c.pitReq=false;c.rainCall=false;}return;}
-      if(!c.pitReq||c.nextCompound!==fin&&(w!=='slick'||COMPOUNDS[c.nextCompound].wet)){c.pitReq=true;c.rainCall=true;c.nextCompound=fin;}return;}
-    if(c.pitReq&&c.rainCall&&!w&&!c.pit&&!c.fuelCall){c.pitReq=false;c.rainCall=false;} // cambia de idea si el tiempo cambia antes de llegar a boxes
-  }
+  if(R.weather&&R.weather.type!=='dry'&&left0>=2&&!(c.lap<=1&&R.t<60)){wxStrategy(R,c);if(c.rainCall)return;} /* v45: en el paso por meta de la salida aún no ha notado la pista */
   const left=left0,lf=Math.max(0.2,left-c.idx/R.tr.N); // vueltas que de verdad faltan (descontando lo ya hecho de la actual)
   // gasolina: parar solo si de verdad no llega (antes paraban en la última vuelta con 35 L para 32 L de consumo)
   {const fpl=fplOf(R,c);if(left>=1&&c.fuel<lf*fpl+fpl*((R.meanWet||0)>0.08?0.45:0.3)&&c.fuel<fpl*2.4){c.pitReq=true;c.nextCompound=c.compound;if(left<=1)return;}}
@@ -1041,8 +1082,7 @@ function botStrategy(R,c){
   // v45: la goma de recambio se elige con el agua que el piloto nota en la trazada (no solo la media de la pista):
   // si unas de lluvia se han comido en una vuelta es que la trazada se seca → un escalón más seco (W→I, I→lisos)
   if(req){c.pitReq=true;const wf=0.45*(R.meanWet||0)+0.55*(c.wetFelt!=null?c.wetFelt:(R.meanWet||0)),cw=COMPOUNDS[c.compound].wet;
-    let nc=wf>0.62?'W':wf>0.2?'I':chooseCompound(left-1,R.est,Math.random());
-    if(cw&&c.wear>0.3&&nc===c.compound)nc=c.compound==='W'?'I':chooseCompound(left-1,R.est,Math.random());
+    let nc=R.weather&&R.weather.type!=='dry'?compoundFor(R,c,chooseCompound(left-1,R.est,Math.random())):wf>0.62?'W':wf>0.2?'I':chooseCompound(left-1,R.est,Math.random());
     c.nextCompound=nc;}
 }
 
@@ -1230,7 +1270,7 @@ function wreck(R,c,power,lx,ix,iy){
   // el chasis sigue deslizando y girando sin control
   c.av+=(Math.random()-0.5)*Math.min(8,power/70);c.r=(c.r||0)+(Math.random()-0.5)*Math.min(8,power/70);c.noESC=R.t+30;
   if(power>360&&!c.tumble){c.air=Math.min(0.85,0.25+(power-360)/500);c.airT=R.t;} // golpe brutal: el coche salta un instante
-  c.dWing=1;c.dSusp=1;c.dRear=1;c.fire=power>520||(power>400&&Math.random()<0.45)||front<0.3&&Math.random()<0.5?R.t+6+Math.random()*6:0;
+  c.dWing=1;c.dSusp=1;c.dRear=1;c.fire=power>520||(power>400&&Math.random()<0.55)||front<0.3&&Math.random()<0.55||Math.random()<0.2?R.t+7+Math.random()*8:0;c.fireBall=c.fire&&(power>380||Math.random()<0.5); /* v53: más fuego y, a veces, bola de fuego */
   if(R.fx)R.events.push({type:'wreck',car:c,x:c.x,y:c.y,power,surf:c.surf,vx:c.vx,vy:c.vy});
   scTrigger(R,c,true);
 }
@@ -1281,7 +1321,7 @@ function scTrigger(R,c,force){
   const tr=R.tr,N=tr.N,s0=lead.idx+45;
   R.sc={phase:'out',s:s0%N,lap:lead.lap+Math.floor(s0/N),v:0,x:tr.xs[s0%N],y:tr.ys[s0%N],a:tr.ang[s0%N],t0:R.t,leadLap0:lead.lap,clear:false,pens:{}};
   R.scCount=(R.scCount||0)+1;
-  for(const o of R.cars)if(o.bot&&!o.dnf&&!o.finished){const left=lapsLeft(R,o),wpl=o.wearPerLap||R.est.wear;if(left>2&&(o.wear>0.35||o.wear+left*wpl>0.85)){o.pitReq=true;o.nextCompound=(R.meanWet||0)>0.62?'W':(R.meanWet||0)>0.2?'I':chooseCompound(left-1,R.est,Math.random());}}
+  for(const o of R.cars)if(o.bot&&!o.dnf&&!o.finished){const left=lapsLeft(R,o),wpl=o.wearPerLap||R.est.wear;if(left>2&&(o.wear>0.35||o.wear+left*wpl>0.85)){o.pitReq=true;o.nextCompound=compoundFor(R,o,chooseCompound(left-1,R.est,Math.random()));}}
   if(R.fx)R.events.push({type:'sc_out'});
 }
 function scProg(R){return R.sc?R.sc.lap*R.tr.N+Math.floor(R.sc.s):0;}
@@ -1452,6 +1492,8 @@ function stepRace(R,dt){
       c.vx*=0.92;c.vy*=0.92;
     }
     // inicio de la entrada a boxes
+    /* v53: última llamada del muro antes de la entrada a boxes, con el radar de ahora (antes se decidía una vuelta antes, en meta) */
+    if(R.mode==='race'&&c.bot&&!c.pit&&!c.finished&&!c.dnf&&R.weather&&R.weather.type!=='dry'&&c.wxCallLap!==c.lap&&lapsLeft(R,c)>=2&&c.lap>=2){const d=dOf(tr,c.idx);if(d>=-(PITL+330)&&d<=-(PITL+130)){c.wxCallLap=c.lap;wxStrategy(R,c);}}
     if((R.mode==='race'||R.liveQ)&&c.pitReq&&!c.pit&&!c.finished&&c.bot){const d=dOf(tr,c.idx);if(d>=-(PITL+100)&&d<=-(PITL+62)){c.pit='in';c.qFly=false;}}
     /* v49: el jugador entra a boxes conduciendo: al meterse en el carril del pit lane pasa a «en boxes» (aunque no hubiera pedido BOX) */
     if((R.mode==='race'||R.liveQ)&&!c.bot&&!c.pit&&!c.finished&&!c.dnf){const d=dOf(tr,c.idx);if(d>=-(PITL+PITE)&&d<-PITL+8&&c.lat*tr.pitSide>W+12&&onPitLane(tr,c)){c.pit='in';c.qFly=false;if(!c.pitReq){c.pitReq=true;if(R.fx)R.events.push({type:'pitenter',car:c});}}
@@ -1462,8 +1504,12 @@ function stepRace(R,dt){
       c.issue=c.failType==='brakes'?'brakes':'oil';if(R.fx)R.events.push({type:'radioIssue',car:c,kind:c.issue});}
     if(c.failAt!=null&&!c.engineDead&&!c.finished&&R.t>c.failAt){c.failAt=null;
       if(c.failType==='brakes'){c.brakeFail=true;if(R.fx)R.events.push({type:'incident',car:c,kind:'brakes'});}
-      else{c.engineDead=true;if(R.fx)R.events.push({type:c.isPlayer?'damage':'incident',car:c,kind:c.failType||'engine',msg:c.failType==='hydraulics'?'Fallo hidráulico':'Avería de motor'});}}
+      else{c.engineDead=true;if(c.failType!=='hydraulics'&&Math.random()<0.35){c.fire=R.t+9+Math.random()*6;c.engFire=true;} /* v53: el motor revienta y arde */
+        if(R.fx)R.events.push({type:c.isPlayer?'damage':'incident',car:c,kind:c.failType||'engine',fire:!!c.engFire,msg:c.failType==='hydraulics'?'Fallo hidráulico':c.engFire?'¡Fuego en el motor!':'Avería de motor'});}}
     if(c.engineDead&&!c.dnf&&Math.hypot(c.vx,c.vy)<10){c.dnf=true;c.dnfReason='Avería';scTrigger(R,c);}
+    if(c.looseAt&&!c.pit&&R.t>c.looseAt&&!c.dnf&&c.wheelOff==null){const w=c.looseW;c.looseAt=null;c.looseW=null;c.wheelOff=w;c.punct=true;c.dSusp=Math.max(c.dSusp||0,0.6);c.suspSide=w%2?1:-1;
+      const front=w<2,side=w%2?1:-1,wd=addDebris(R,c,'wheel',front?13:-11,side*6,c.vx*0.9+(-Math.sin(c.a))*side*60,c.vy*0.9+Math.cos(c.a)*side*60,90);wd.va=(Math.random()<0.5?-1:1)*12;
+      if(c.bot&&R.mode==='race')c.wheelDnfAt=R.t+2+Math.random();if(R.fx)R.events.push({type:'damage',car:c,msg:'Rueda mal apretada'});}
     if(c.wheelDnfAt&&!c.dnf&&R.t>c.wheelDnfAt){c.dnf=true;c.dnfReason='Rueda perdida';scTrigger(R,c);}
     if(c.brakeFail&&!c.dnf&&c.off&&Math.hypot(c.vx,c.vy)<25){c.dnf=true;c.dnfReason='Frenos';scTrigger(R,c);}
     if(!c.dnf&&!c.finished&&c.fuel<=0&&!c.pit&&Math.hypot(c.vx,c.vy)<8&&R.mode==='race'){c.dnf=true;c.dnfReason='Sin gasolina';if(R.fx)R.events.push({type:'dnf',car:c});}
