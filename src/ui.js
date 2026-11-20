@@ -1404,7 +1404,11 @@ function fxFrame(dt){
     // chispas del patín del fondo: a mucha velocidad sobre pianos o al tocar fondo frenando fuerte
     if(sp>420&&((c.surf==='kerb'&&Math.random()<0.5)||(c.brake>0.8&&Math.random()<0.25)||(c.dSusp>0.3&&Math.random()<0.3))){const fx=Math.cos(c.a),fy=Math.sin(c.a),bx=c.x-fx*6,by=c.y-fy*6;
       for(let k=0;k<2;k++)spawn(bx+(Math.random()-0.5)*6,by+(Math.random()-0.5)*6,c.vx*0.55+(Math.random()-0.5)*80,c.vy*0.55+(Math.random()-0.5)*80,0.15+Math.random()*0.25,1,'spark');}
-    if(c.wet>0.18&&sp>140&&paved(c.surf)&&Math.random()<0.5+c.wet*0.5){const w=rearWheels(c)[Math.random()<0.5?0:1];spawn(w[0],w[1],c.vx*0.35+(Math.random()-0.5)*50,c.vy*0.35+(Math.random()-0.5)*50,0.5+c.wet*0.4,7,'spray');}
+    /* v62: estela de agua: crece con el agua y la velocidad; la nube alta (que tapa la vista al que sigue) solo cerca de la cámara */
+    if(c.wet>0.12&&sp>110&&paved(c.surf)){const amt=Math.min(1.5,c.wet*1.8*(sp/380));let m=amt;const near=Math.hypot(c.x-cam.x,c.y-cam.y)<Rv*0.6;
+      while(m>0){if(particles.length<620&&Math.random()<m){const w=rearWheels(c)[Math.random()<0.5?0:1],big=near&&Math.random()<0.4;const p=spawn(w[0],w[1],c.vx*(big?0.5:0.32)+(Math.random()-0.5)*60,c.vy*(big?0.5:0.32)+(Math.random()-0.5)*60,big?0.9+c.wet*0.9:0.45+c.wet*0.4,big?10:6.5,'spray');if(big)p.grow=26;}m-=1;}
+      wakeAdd(c);}
+    else c._wk=null;
     if(!paved(c.surf)&&sp>60&&Math.random()<0.8){const w=rearWheels(c)[Math.random()<0.5?0:1];spawn(w[0],w[1],c.vx*0.3+(Math.random()-0.5)*60,c.vy*0.3+(Math.random()-0.5)*60,0.7,3+Math.random()*3,c.surf==='gravel'?'gravel':'dirt');
       // nube de polvo/tierra
       if(Math.random()<0.6){const p=spawn(w[0],w[1],c.vx*0.15+(Math.random()-0.5)*40,c.vy*0.15+(Math.random()-0.5)*40,1.4+Math.random(),6+Math.random()*4,c.surf==='gravel'?'dust':'dirtcloud');p.grow=18;}}
@@ -2390,23 +2394,73 @@ function drawWet(G,tr,Rv){
       if(b!==pb){if(b>0)for(const o of [-6.5,6.5]){const a=pj(o),c=pt(o);dp[b].moveTo(a[0],a[1]);dp[b].lineTo(c[0],c[1]);}if(b>0){const a=pj(0),c=pt(0);band[b].moveTo(a[0],a[1]);band[b].lineTo(c[0],c[1]);}pb=b;}
       else if(b>0){for(const o of [-6.5,6.5]){const a=pj(o),c=pt(o);dp[b].moveTo(a[0],a[1]);dp[b].lineTo(c[0],c[1]);}const c=pt(0);band[b].lineTo(c[0],c[1]);}}
     for(let b=1;b<=3;b++){ctx.strokeStyle=`rgba(112,114,120,${0.2*b})`;ctx.lineWidth=7;ctx.stroke(dp[b]);if(b===3){ctx.strokeStyle='rgba(112,114,120,0.35)';ctx.lineWidth=24;ctx.stroke(band[b]);}}}
+  drawWake(Rv);
   ctx.lineCap='round';
   for(const p of G.puddles){const w=wv[p.i];if(w<p.th)continue;if(Math.abs(p.x-cam.x)>Rv||Math.abs(p.y-cam.y)>Rv)continue;
     const a=Math.min(1,(w-p.th)*3);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.a);
     ctx.fillStyle=`rgba(60,78,105,${0.45*a})`;ctx.beginPath();ctx.ellipse(0,0,p.rx,p.ry,0,0,Math.PI*2);ctx.fill();
     ctx.fillStyle=`rgba(200,220,245,${0.18*a})`;ctx.beginPath();ctx.ellipse(-p.rx*0.25,-p.ry*0.3,p.rx*0.45,p.ry*0.25,0,0,Math.PI*2);ctx.fill();ctx.restore();}
+  drawSplashes(G,Rv);
 }
+/* v62: huella que dejan las ruedas en la pista mojada (el agua apartada se ve más clara unos segundos) */
+const WAKE={buf:new Float32Array(5*2400),n:0,h:0};
+function wakeAdd(c){if(!R||R.t==null)return;const W2=rearWheels(c),k=c._wk;c._wk=[W2[0][0],W2[0][1],W2[1][0],W2[1][1],R.t];if(!k||R.t-k[4]>0.3)return;
+  for(let j=0;j<2;j++){const o=WAKE.h*5;WAKE.buf[o]=k[j*2];WAKE.buf[o+1]=k[j*2+1];WAKE.buf[o+2]=c._wk[j*2];WAKE.buf[o+3]=c._wk[j*2+1];WAKE.buf[o+4]=R.t;WAKE.h=(WAKE.h+1)%2400;WAKE.n=Math.min(2400,WAKE.n+1);}}
+function drawWake(Rv){if(!WAKE.n||!R.t)return;const P=[new Path2D(),new Path2D(),new Path2D()],T=R.t;
+  for(let i=0;i<WAKE.n;i++){const o=i*5,age=T-WAKE.buf[o+4];if(age>2.4||age<0)continue;const x=WAKE.buf[o],y=WAKE.buf[o+1];if(Math.abs(x-cam.x)>Rv||Math.abs(y-cam.y)>Rv)continue;
+    const b=age<0.8?0:age<1.6?1:2;P[b].moveTo(x,y);P[b].lineTo(WAKE.buf[o+2],WAKE.buf[o+3]);}
+  ctx.lineCap='round';ctx.lineWidth=5.5;for(let b=0;b<3;b++){ctx.strokeStyle='rgba(150,156,168,'+[0.2,0.12,0.06][b]+')';ctx.stroke(P[b]);}}
+/* v62: gotas que rebotan en el suelo (anillos que se abren) y ondas en los charcos; sin estado, salen de la hora */
+function drawSplashes(G,Rv){const r=rainAt(R.weather,cam.x,cam.y);if(r<0.08)return;const t=performance.now()/1000,n=Math.floor(90*Math.min(1,r)),span=Math.min(Rv,900);
+  const hs=v=>{v=Math.imul(v^(v>>>15),2246822519);v=Math.imul(v^(v>>>13),3266489917);return ((v^(v>>>16))>>>0)/4294967296;};
+  ctx.save();ctx.strokeStyle='rgba(215,228,245,.5)';ctx.lineWidth=0.7;ctx.beginPath();
+  for(let k=0;k<n;k++){const ph=t/0.42+k*0.618,cyc=Math.floor(ph),f=ph-cyc,sd=k*7919+cyc*104729,x=cam.x+(hs(sd)-0.5)*span*1.4,y=cam.y+(hs(sd+1)-0.5)*span*1.4,rr=0.8+f*4.5;
+    ctx.moveTo(x+rr,y);ctx.arc(x,y,rr,0,Math.PI*2);}
+  ctx.globalAlpha=0.55;ctx.stroke();
+  /* ondas en los charcos llenos */
+  ctx.beginPath();for(const p of G.puddles){const w=R.water[p.i];if(w<p.th+0.05)continue;if(Math.abs(p.x-cam.x)>Rv||Math.abs(p.y-cam.y)>Rv)continue;
+    for(let q=0;q<3;q++){const ph=t/0.8+q*0.37+p.i*0.11,cyc=Math.floor(ph),f=ph-cyc,sd=p.i*31+q*7+cyc*977,ca=Math.cos(p.a),sa=Math.sin(p.a),u=(hs(sd)-0.5)*p.rx*1.2,v=(hs(sd+3)-0.5)*p.ry*1.2,x=p.x+u*ca-v*sa,y=p.y+u*sa+v*ca,rr=1+f*Math.min(9,p.ry*0.9);
+      ctx.moveTo(x+rr,y);ctx.ellipse(x,y,rr,rr*0.85,0,0,Math.PI*2);}}
+  ctx.globalAlpha=0.35*Math.min(1,r*1.5);ctx.stroke();ctx.restore();ctx.globalAlpha=1;}
+/* v62: luz roja trasera de lluvia (parpadea, como la de verdad) y su reflejo en el asfalto mojado */
+function drawRainLights(Rv){if(!R.weather||R.weather.type==='dry'||!R.water)return;const on=Math.floor(performance.now()/125)%2===0;
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const c of R.cars){if(c.gone||c.wrecked||(c.dnf&&!c.finished))continue;if(Math.abs(c.x-cam.x)>Rv||Math.abs(c.y-cam.y)>Rv)continue;
+    const w=R.water[c.idx]||0,ra=rainAt(R.weather,c.x,c.y);if(w<0.12&&ra<0.15)continue;const fx=Math.cos(c.a),fy=Math.sin(c.a),lx=c.x-fx*(HL+0.5),ly=c.y-fy*(HL+0.5),a=on?1:0.25;
+    /* reflejo: mancha roja alargada en el suelo, detrás del coche */
+    if(w>0.15){ctx.save();ctx.translate(lx-fx*8,ly-fy*8);ctx.rotate(c.a);const g=ctx.createRadialGradient(0,0,0,0,0,12);g.addColorStop(0,'rgba(255,40,30,'+(0.28*a*Math.min(1,w*1.6))+')');g.addColorStop(1,'rgba(255,0,0,0)');ctx.fillStyle=g;ctx.scale(1.9,0.55);ctx.beginPath();ctx.arc(0,0,12,0,Math.PI*2);ctx.fill();ctx.restore();}
+    const g=ctx.createRadialGradient(lx,ly,0,lx,ly,7);g.addColorStop(0,'rgba(255,200,190,'+a+')');g.addColorStop(0.3,'rgba(255,40,30,'+(0.8*a)+')');g.addColorStop(1,'rgba(255,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(lx,ly,7,0,Math.PI*2);ctx.fill();}
+  ctx.restore();}
 const DROPS=[];for(let i=0;i<420;i++)DROPS.push({x:Math.random(),y:Math.random(),l:0.6+Math.random()*0.8,s:0.7+Math.random()*0.6});
 function drawRainOverlay(dt){
+  /* v62: nube de agua del coche de delante: si le sigues de cerca con la pista mojada no ves casi nada */
+  const pl=R.player;let hz=0;
+  if(pl&&!pl.dnf&&R.water&&R.weather&&R.weather.type!=='dry'){const fx=Math.cos(pl.a),fy=Math.sin(pl.a);
+    for(const c of R.cars){if(c===pl||c.gone||c.dnf)continue;const dx=c.x-pl.x,dy=c.y-pl.y,ah=dx*fx+dy*fy;if(ah<10||ah>200)continue;const lat=Math.abs(-dx*fy+dy*fx);if(lat>40)continue;
+      const sp=Math.hypot(c.vx,c.vy),w=(R.water[c.idx]||0)*(R.dry?1-0.7*R.dry[c.idx]:1);if(sp<120||w<0.12)continue;
+      hz=Math.max(hz,(1-ah/200)*(1-lat/40)*Math.min(1,w*1.7)*Math.min(1,(sp-120)/250));}}
+  ui.haze=(ui.haze||0)+(hz-(ui.haze||0))*Math.min(1,dt*4);
+  if(ui.haze>0.01&&!ui.replay){const H=ui.haze;ctx.fillStyle='rgba(196,204,214,'+(0.4*H)+')';ctx.fillRect(0,0,VW,VH);
+    const g=ctx.createRadialGradient(VW/2,VH*0.42,0,VW/2,VH*0.42,Math.max(VW,VH)*0.45);g.addColorStop(0,'rgba(220,226,234,'+(0.35*H)+')');g.addColorStop(1,'rgba(220,226,234,0)');ctx.fillStyle=g;ctx.fillRect(0,0,VW,VH);}
   if(!R.weather||R.weather.type==='dry')return;
   const r=rainAt(R.weather,cam.x,cam.y);
   if(r<0.03)return;
   ctx.fillStyle=`rgba(18,26,40,${Math.min(0.32,r*0.3)})`;ctx.fillRect(0,0,VW,VH);
-  const n=Math.floor(DROPS.length*Math.min(1,r)),wx=(R.weather.wx||0)*0.004;
-  ctx.strokeStyle=`rgba(200,215,235,${0.25+0.25*r})`;ctx.lineWidth=1.1;ctx.beginPath();
+  /* movimiento de la cámara en pantalla: las gotas se inclinan hacia atrás al ir rápido */
+  const pc=ui.rainCam||(ui.rainCam={x:cam.x,y:cam.y});let mvx=(cam.x-pc.x)/Math.max(dt,0.001)*cam.z,mvy=(cam.y-pc.y)/Math.max(dt,0.001)*cam.z;pc.x=cam.x;pc.y=cam.y;
+  if(camMode==='rot'){const cr=Math.cos(cam.rot),sr=Math.sin(cam.rot),a=mvx*cr-mvy*sr,b=mvx*sr+mvy*cr;mvx=a;mvy=b;}
+  if(!isFinite(mvx)||Math.abs(mvx)>3000)mvx=0;if(!isFinite(mvy)||Math.abs(mvy)>3000)mvy=0;
+  const sm=ui.rainMv||(ui.rainMv={x:0,y:0});sm.x+=(mvx-sm.x)*Math.min(1,dt*5);sm.y+=(mvy-sm.y)*Math.min(1,dt*5);
+  const n=Math.floor(DROPS.length*Math.min(1,r)),wx=(R.weather.wx||0)*0.004,t=performance.now()/1000;
+  const sx=wx*60/14-sm.x*0.0009,sy=1-sm.y*0.0009;
+  /* ráfagas: la densidad de gotas sube y baja en franjas que barre el viento */
+  ctx.lineWidth=1.1;const bands=[new Path2D(),new Path2D()];
   for(let i=0;i<n;i++){const d=DROPS[i];d.y+=dt*1.6*d.s;d.x+=dt*wx;if(d.y>1){d.y-=1;d.x=Math.random();}if(d.x>1)d.x-=1;if(d.x<0)d.x+=1;
-    const x=d.x*VW,y=d.y*VH,L=14*d.l;ctx.moveTo(x,y);ctx.lineTo(x+wx*60*L/14,y+L);}
-  ctx.stroke();
+    const gust=0.5+0.5*Math.sin(d.x*5.5+d.y*2.2-t*1.3);if(r<0.6&&gust<0.35&&(i&1))continue;
+    const x=d.x*VW,y=d.y*VH,L=14*d.l*(1+Math.min(1.2,Math.hypot(sm.x,sm.y)*0.0012));const P=bands[gust>0.6?1:0];P.moveTo(x,y);P.lineTo(x+sx*L,y+sy*L);}
+  ctx.strokeStyle=`rgba(200,215,235,${0.18+0.2*r})`;ctx.stroke(bands[0]);ctx.strokeStyle=`rgba(215,226,242,${0.3+0.3*r})`;ctx.stroke(bands[1]);
+  /* con lluvia fuerte, neblina en los bordes (se ve menos lejos) */
+  if(r>0.45){const k=Math.min(1,(r-0.45)/0.45),g=ctx.createRadialGradient(VW/2,VH/2,Math.min(VW,VH)*0.25,VW/2,VH/2,Math.hypot(VW,VH)*0.55);g.addColorStop(0,'rgba(150,160,176,0)');g.addColorStop(1,'rgba(150,160,176,'+(0.42*k)+')');ctx.fillStyle=g;ctx.fillRect(0,0,VW,VH);}
 }
 function render(dt){
   ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -2443,6 +2497,7 @@ function render(dt){
       ctx.restore();}}}
   if(!attract)drawHeat(Rv);
   for(const c of R.cars){if(!c.gone&&Math.abs(c.x-cam.x)<Rv&&Math.abs(c.y-cam.y)<Rv)drawCar(c);}
+  drawRainLights(Rv);
   drawDecoDyn(Rv);
   drawGantry(tr,Rv);drawFlagMarshal(tr,Rv);
   drawGhost();

@@ -3,7 +3,7 @@ const VMAX=600, ACC=440, BRAKE=540, REV_ACC=260, REV_MAX=120;
 const STEER=3.4, STEER_LOSS=0.42, A_LAT=1250, K_LAT=16;
 const W=60, RUNOFF=230, SP=10, KMH=0.55;
 const HL=19, HW=7.5, INERTIA=(4*HL*HL+4*HW*HW)/12, CARW=2*HW; // coche a escala real: 5,6 m × 2 m (6,5 px/m)
-const BOTDEC=0.74,BOTCRN=0.82,RL_MAX=46,L1F=0.97,WGX=0.85,BOTAERO=0.75,BOTLIVE=0.9,BOTLIVEW=0.86,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6,L1LANE=34,L1FADE=500,L1END=300,L1ENDT=1.6,L1K=1,BOTFF=2,BOTFFT=0.12; // fracción de la frenada máxima que usan los bots
+const BOTDEC=0.74,BOTCRN=0.86,RL_MAX=46,L1F=0.97,WGX=0.85,BOTAERO=0.75,BOTLIVE=0.9,BOTLIVEW=0.86,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6,L1LANE=34,L1FADE=500,L1END=300,L1ENDT=1.6,L1K=1,BOTFF=2,BOTFFT=0.12; // fracción de la frenada máxima que usan los bots
 const PIT_LAT=W+65, PIT_BOX=W+99, PIT_V=150, PIT_HALF=26, BOT_BRAKE=BRAKE*0.66;
 // modos de motor: ahorro / normal / ataque
 const EMODES=[{n:'Ahorro',p:0.965,heat:0.55,fuel:0.88,wear:0.5},{n:'Normal',p:1,heat:1,fuel:1,wear:1},{n:'Ataque',p:1.035,heat:1.5,fuel:1.12,wear:2.2}];
@@ -295,7 +295,7 @@ function wetNeed(R,c){if(!R.weather||R.weather.type==='dry')return 0;const lap=(
 /* v61: los bots van más cerca del límite en curva (CNK0 en velocidad ≈ usar el 94 % del agarre en vez del 82 %) y aprenden curva a curva:
    donde alguno se sale o desliza de más, todos levantan un poco ahí (R.cnk por tramos de 40 puntos, baja CNKD por salida, nunca por debajo de 1). */
 /* v61: la pista se seca más despacio (antes en ~1 min pasaba de encharcada a casi seca) */
-let DRYK=0.006,CNK0=1,CNKD=0.04,CNKMIN=1, /* v61: aprendizaje por curvas probado y desactivado (CNK0=1): no mejoraba en todos los circuitos */WXGAIN=5,WXK=0.55,UNDERCUT=true,UCLAPS=4,UCCOLD=1.0,REDPOW=640,REDWAIT=3.5;
+let BOTPL=1, /* v62: bots con la física del jugador */ HITYK0=25,HITYM0=1.0,HITMU=0.45,PUNT0=45,PUNTW=150, /* v62: golpes */ DRYK=0.006,CNK0=1,CNKD=0.04,CNKMIN=1, /* v61: aprendizaje por curvas probado y desactivado (CNK0=1): no mejoraba en todos los circuitos */WXGAIN=5,WXK=0.55,UNDERCUT=true,UCLAPS=4,UCCOLD=1.0,REDPOW=640,REDWAIT=3.5;
 function wxPlan(R){const Wt=R.weather;if(R.wxP&&Math.abs(R.wxP.t-Wt.t)<4)return R.wxP;
   const lap=(R.est&&R.est.lap)||90,st=10,H=Math.max(200,lap*3.2);let w=R.meanWet||0,tg=w;const a=[w];
   for(let t=st,i=1;t<=H;t+=st,i++){if(i%2===1)tg=forecastWet(R,[t]);w=clamp(w+(tg-w)*(tg>w?0.07:DRYK)*st,0,1);a.push(w);}
@@ -864,7 +864,8 @@ function physicsSim(R,c,dt){
   c.r+=c.av;c.av=0;                                // golpes: impulso de giro
   const v=Math.abs(vf),S=SURF[c.surf],massF=1+0.14*c.fuel/TANK;
   // v44: transferencia lateral de peso: mientras la carrocería se balancea al cambiar de apoyo (eses), el coche agarra algo menos (solo jugador)
-  const pl=c.isPlayer&&!c.bot,mu=gripLat(c,v,R)*(pl?1-0.07*Math.min(1,(c.rollLag||0)/1.6):1);
+  /* v62: pl0 = el jugador de verdad; pl = coches con la física del jugador (también los bots si BOTPL); AID = ayudas (los bots, siempre) */
+  const pl0=c.isPlayer&&!c.bot,pl=pl0||(BOTPL&&c.bot),AID=pl0?AID:true,mu=gripLat(c,v,R)*(pl?1-0.07*Math.min(1,(c.rollLag||0)/1.6):1);
   const thr=(c.fuel>0||c.pit)&&!c.dnf&&!c.engineDead?c.throttle:0;
   // --- longitudinal ---
   const skillP=c.isPlayer?1:Math.pow(c.skill,1.5);
@@ -907,27 +908,27 @@ function physicsSim(R,c,dt){
   const tcCap=Math.sqrt(Math.max(0,(kTc*muR)*(kTc*muR)-ayR*ayR));
   let spinT=0;
   // con ayudas, el control de tracción deja la misma tracción que antes (y que los bots): no patina, pero tampoco gana nada
-  if(pl&&R.aids&&FxR>tracCap){spinT=Math.min(0.2,(FxR-tracCap)/Math.max(1,muR)*0.25);FxR=tracCap;}
+  if(pl&&AID&&FxR>tracCap){spinT=Math.min(0.2,(FxR-tracCap)/Math.max(1,muR)*0.25);FxR=tracCap;}
   // v45: sin ayudas, como mucho un 8 % más de tracción que con ayudas (premio pequeño; si no, el pie automático daba ventaja enorme)
-  if(pl&&!R.aids&&FxR>tracCap*1.08&&FxR<=tcCap)FxR=tracCap*1.08;
+  if(pl&&!AID&&FxR>tracCap*1.08&&FxR<=tcCap)FxR=tracCap*1.08;
   if(FxR>tcCap){
     // v44: jugador sin ayudas: la potencia que sobra hace patinar las ruedas traseras (tracción menor y la trasera pierde agarre lateral).
     // Con ayudas, el control de tracción recorta (solo un leve patinaje que se ve). Bots: como antes.
-    if(pl&&FxR>0){const ex=(FxR-tcCap)/Math.max(1,muR);spinT=R.aids?Math.min(0.2,ex*0.25):clamp((ex-0.1)*0.7,0,1); // v45: menos brusco (un poco de exceso apenas patina)
+    if(pl&&FxR>0){const ex=(FxR-tcCap)/Math.max(1,muR);spinT=AID?Math.min(0.2,ex*0.25):clamp((ex-0.1)*0.7,0,1); // v45: menos brusco (un poco de exceso apenas patina)
       if(c.autoLaunch&&R.t<c.autoLaunch&&c.launch!=='spin'&&c.launch!=='bigspin')spinT*=0.25; // salida bien hecha: el embrague dosifica
-      FxR=Math.max(R.aids?tcCap:Math.min(tcCap,tracCap*1.08),0)*(R.aids?1:1-0.2*(c.spinW||0));}
+      FxR=Math.max(AID?tcCap:Math.min(tcCap,tracCap*1.08),0)*(AID?1:1-0.2*(c.spinW||0));}
     else FxR=Math.max(tcCap,0);}
   if(pl)c.spinW=(c.spinW||0)+(spinT-(c.spinW||0))*Math.min(1,(spinT>(c.spinW||0)?14:6)*dt);
   // frenada que supera el agarre: bloqueo
   /* v49: con ayudas el jugador lleva ABS: la frenada se queda en el límite sin bloquear (ni marcas ni plano) */
-  const absP=pl&&R.aids;let lock=0;if(-FxF>muF*0.98){lock=absP?0:1;FxF=-muF*0.95;}if(-FxR>muR*0.98){lock=absP?0:1;FxR=Math.max(FxR,-muR*0.95);}
+  const absP=pl&&AID;let lock=0;if(-FxF>muF*0.98){lock=absP?0:1;FxF=-muF*0.95;}if(-FxR>muR*0.98){lock=absP?0:1;FxR=Math.max(FxR,-muR*0.95);}
   // jugador: si mantiene el freno a fondo cuando ya ha bajado la velocidad (menos carga aerodinámica), bloquea.
   // Hay que soltar un poco al final de la frenada. Con ayudas bloquea más tarde y más suave.
   if(c.isPlayer&&!c.bot){
     c.brakeHold=c.brake>0.92&&vf>20?(c.brakeHold||0)+dt:0;
-    const lockV=(R.aids?160:260)*(0.8+0.4*(c.brakeS==null?0.5:c.brakeS))*(c.bT>950?1+Math.min(0.35,(c.bT-950)/400):c.bT<220?1.2:1); // v45: frenos calientes o fríos: bloquea antes // ~90 / ~145 km/h; más freno en el reglaje: bloquea antes
-    if(c.brakeHold>0.45&&v<lockV&&!R.aids){c.lockUp=true;}else if(c.brake<0.75||vf<15)c.lockUp=false;
-    if(c.lockUp){lock=1;const k=R.aids?0.85:0.72;FxF=-muF*k;FxR=Math.max(FxR,-muR*k);c.lockF=R.aids?0.45:0.2;
+    const lockV=(AID?160:260)*(0.8+0.4*(c.brakeS==null?0.5:c.brakeS))*(c.bT>950?1+Math.min(0.35,(c.bT-950)/400):c.bT<220?1.2:1); // v45: frenos calientes o fríos: bloquea antes // ~90 / ~145 km/h; más freno en el reglaje: bloquea antes
+    if(c.brakeHold>0.45&&v<lockV&&!AID){c.lockUp=true;}else if(c.brake<0.75||vf<15)c.lockUp=false;
+    if(c.lockUp){lock=1;const k=AID?0.85:0.72;FxF=-muF*k;FxR=Math.max(FxR,-muR*k);c.lockF=AID?0.45:0.2;
       if(R.mult)c.wear=Math.min(1,c.wear+0.004*R.mult*dt);}else c.lockF=0;
   }
   ax=FxF+FxR-resist+(ax);
@@ -935,7 +936,7 @@ function physicsSim(R,c,dt){
   const del=c.steer*delMax(c,v,R)*(vf>=0?1:-1)+(c.dSusp>0?c.dSusp*0.02*c.suspSide:0)+(wo!=null?0.035*c.suspSide:0);
   // v44 (solo jugador): al levantar el pie el peso pasa delante y el morro entra mejor; el tren delantero responde antes
   if(pl){const lift=thr<0.25&&!braking&&v>V_DYN?1:0;c.liftK=(c.liftK||0)+(lift-(c.liftK||0))*Math.min(1,(lift?7:4)*dt);}
-  const latF=(c.lockF?c.lockF:1)*Math.sqrt(Math.max(muF*muF-FxF*FxF,0.12*muF*muF))*(pl?1+0.08*c.liftK:1),latR=Math.sqrt(Math.max(muR*muR-FxR*FxR,(abs?0.36:0.1)*muR*muR))*(pl&&!R.aids?1-0.35*(c.spinW||0):1);
+  const latF=(c.lockF?c.lockF:1)*Math.sqrt(Math.max(muF*muF-FxF*FxF,0.12*muF*muF))*(pl?1+0.08*c.liftK:1),latR=Math.sqrt(Math.max(muR*muR-FxR*FxR,(abs?0.36:0.1)*muR*muR))*(pl&&!AID?1-0.35*(c.spinW||0):1);
   const CSf=pl?CS*1.2:CS;
   let slide=0;
   if(v<V_DYN){
@@ -945,7 +946,7 @@ function physicsSim(R,c,dt){
   }else{
     /* v49 (solo jugador): la deriva de las delanteras no pasa de ~8° con ayudas (~10° sin): a partir de ahí la goma ya no gira más, solo arrastra.
        Con teclado (todo o nada) el volante a fondo las llevaba a ~18°: marcas, humo y calor al girar después de frenar. */
-    const bF=Math.atan2(vl+LA*c.r,v),dE=pl&&paved(c.surf)?clamp(del,bF-(R.aids?2.4:3.0)/CSf,bF+(R.aids?2.4:3.0)/CSf):del;
+    const bF=Math.atan2(vl+LA*c.r,v),dE=pl&&paved(c.surf)?clamp(del,bF-(AID?2.4:3.0)/CSf,bF+(AID?2.4:3.0)/CSf):del;
     const af=bF-dE,ar=Math.atan2(vl-LB*c.r,v);
     const Ff=-latF*Math.tanh(CSf*af),Fr=-latR*Math.tanh(CS*ar);
     let dr=(LA*Ff*Math.cos(dE)-LB*Fr)/IZ;
@@ -954,10 +955,10 @@ function physicsSim(R,c,dt){
     // v44 (solo jugador): estabilidad. Si la trasera empieza a irse, el coche ayuda un poco a recogerlo (sin ayudas, menos);
     // con el volante recto a alta velocidad, el coche tiende a ir recto (no culebrea con los toques de teclado)
     if(pl&&paved(c.surf)&&!(c.noESC>R.t)&&!(c.ooc>R.t)){const rRef=rGrip;
-      if(Math.abs(ar)>0.06)dr-=(c.r-rRef)*(R.aids?2.5:3)*Math.min(1,(Math.abs(ar)-0.06)/0.06);
+      if(Math.abs(ar)>0.06)dr-=(c.r-rRef)*(AID?2.5:3)*Math.min(1,(Math.abs(ar)-0.06)/0.06);
       if(Math.abs(c.steer)<0.04&&v>220)dr-=c.r*3;}
     // control de estabilidad (ayuda): frena el giro excesivo y corta gas si la trasera desliza
-    if((c.bot||R.aids)&&!(c.noESC>R.t)){const rRef=pl?rGrip:rKin;
+    if((c.bot||AID)&&!(c.noESC>R.t)){const rRef=pl?rGrip:rKin;
       if(Math.abs(ar)>0.10){dr-=(c.r-rRef)*5;ax-=Math.max(0,FxR)*0.6;}}
     // integramos en ejes del mundo: el giro del coche ya rota la velocidad, sin término de Coriolis explícito
     const dvl=Ff*Math.cos(dE)+Fr;
@@ -971,7 +972,7 @@ function physicsSim(R,c,dt){
   c.a+=c.r*dt;c.yaw=c.r;
   c.x+=c.vx*dt;c.y+=c.vy*dt;
   /* v53: el jugador (teclado/táctil: volante todo o nada) trabaja la goma con más deriva que un bot: el calor por deslizar empieza 0,04 rad más tarde (medido: sus gomas iban 10-20 °C más calientes que las de los bots) */
-  c.skid=clamp(Math.max((slide-0.09-(pl?0.04:0))/0.12,lock?0.7:0),0,1);
+  c.skid=clamp(Math.max((slide-0.09-(pl0?0.04:0))/0.12,lock?0.7:0),0,1);
   if(c.launchSpin&&R.t<c.launchSpin&&thr>0.5)c.skid=Math.max(c.skid,0.85);
   // v44: lo que se ve y se oye (marcas, humo, chirrido) solo cuando el neumático pasa de verdad de su límite (~9°),
   // no al trabajar normal en curva; c.skid sigue igual para el calor y el desgaste
@@ -1024,17 +1025,30 @@ function collidePair(R,a,b){
   const ran=rax*n[1]-ray*n[0],rbn=rbx*n[1]-rby*n[0];
   const IE=200*2.6;
   const j=-(1+0.05)*vn/(ia+ib+ran*ran*ia/IE+rbn*rbn*ib/IE);
-  // roces suaves (< ~30 km/h de diferencia) apenas hacen girar; los golpes fuertes sí trompean
-  const yk=clamp((-vn-40)/120,0.15,1),ym=0.6+2.4*clamp((-vn-60)/200,0,1);
+  /* v62: golpes con más inercia: el giro que transmite el golpe ya no se recorta tanto (antes un toque a <30 km/h casi no giraba
+     y el máximo era 0,6 rad/s), y hay rozamiento en el contacto (ruedas que se tocan se enganchan y el coche tocado gira) */
+  const yk=clamp((-vn-HITYK0)/90,0.3,1),ym=HITYM0+3.2*clamp((-vn-40)/170,0,1);
   a.vx-=n[0]*j*ia;a.vy-=n[1]*j*ia;a.av=clamp(a.av-ran*j*ia/IE*yk,-ym,ym);
   b.vx+=n[0]*j*ib;b.vy+=n[1]*j*ib;b.av=clamp(b.av+rbn*j*ib/IE*yk,-ym,ym);
+  if(HITMU>0){const tx=-n[1],ty=n[0],vt=(vbx-vax)*tx+(vby-vay)*ty,rat=rax*ty-ray*tx,rbt=rbx*ty-rby*tx;
+    const jt=clamp(-vt/(ia+ib+rat*rat*ia/IE+rbt*rbt*ib/IE),-HITMU*j,HITMU*j);
+    a.vx-=tx*jt*ia;a.vy-=ty*jt*ia;a.av=clamp(a.av-rat*jt*ia/IE*yk,-ym,ym);b.vx+=tx*jt*ib;b.vy+=ty*jt*ib;b.av=clamp(b.av+rbt*jt*ib/IE*yk,-ym,ym);}
   if(-vn>40)R.hits=(R.hits||0)+1;
   const loc=(c)=>(px-c.x)*Math.cos(c.a)+(py-c.y)*Math.sin(c.a),side=(c)=>-(px-c.x)*Math.sin(c.a)+(py-c.y)*Math.cos(c.a);
   stewardsCheck(R,a,b,-vn,n);
   hurt(R,a,-vn,loc(a),side(a),-n[0],-n[1]);hurt(R,b,-vn,loc(b),side(b),n[0],n[1]);
+  puntCheck(R,a,-vn,loc(a),side(a),-Math.sign(ran)||1);puntCheck(R,b,-vn,loc(b),side(b),Math.sign(rbn)||1);
   if(R.fx&&-vn>60)R.events.push({type:'hit',x:px,y:py,power:-vn,player:a.isPlayer||b.isPlayer});
 }
 
+/* v62: toque en la esquina de un coche (sobre todo la rueda trasera): pierde el control, se cruza y desliza con la inercia que llevaba.
+   El piloto no controla nada durante 0,6-1,6 s (c.ooc, agarre a la mitad); si en ese rato vuelve a golpear fuerte, se destroza (regla de hurt). */
+function puntCheck(R,c,power,lx,ly,dir){if(c.dnf||c.wrecked||c.ooc>R.t||power<PUNT0||c.pit)return;
+  const rear=lx<-9,front=lx>11;if(!rear&&!front)return;
+  const pr=clamp((power-PUNT0)/PUNTW,0,1)*(rear?0.9:0.45)*(Math.abs(ly)>3?1:0.5);if(Math.random()>pr)return;
+  const sg=dir,yi=sg*Math.min(5.5,1.3+power/70)*(0.7+0.5*Math.random());
+  c.oocT=R.t;c.ooc=R.t+0.6+Math.min(1,power/180);c.noESC=c.ooc+0.4;c.r=(c.r||0)+yi;c.av=(c.av||0)+yi;c.oocSteer=0;
+  if(R.fx)R.events.push({type:'spinout',car:c,x:c.x,y:c.y,power});}
 // Daños por golpe: delante = alerón, detrás = caja/motor, lateral = suspensión; posible pinchazo o abandono.
 function hurt(R,c,power,lx,ly,ix,iy){
   // daños según la zona del golpe y la velocidad de impacto (componente perpendicular):
