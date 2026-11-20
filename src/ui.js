@@ -611,7 +611,7 @@ const TRACK_OPTS=TRACKS.map((t,i)=>[i,t.short||t.name]);
 function trackSelect(id,cur){return `<select id="${id}" class="tsel">`+TRACKS.map((t,i)=>`<option value="${i}"${i===cur?' selected':''}>${esc(t.name)}${t.country?' · '+esc(t.country):''}</option>`).join('')+'</select>';}
 const OPT={laps:[[3,'3'],[5,'5'],[10,'10'],[20,'20']],diff:[['facil','Fácil'],['normal','Normal'],['dificil','Difícil'],['experto','Experto'],['auto','Adaptativa']],quali:[[1,'Sí'],[0,'No']],
   mult:[[1,'x1'],[2,'x2'],[4,'x4']],comp:[['S','Blando'],['M','Medio'],['H','Duro'],['I','Interm.'],['W','Lluvia']],weather:[['dry','Seco'],['var','Variable'],['rain','Lluvia']],weatherC:[['dry','Seco'],['var','Variable'],['rain','Lluvia'],['rand','Aleatorio']],fuel:[['full','Toda la carrera'],['half','Media']],cars:[[8,'8'],[12,'12'],[16,'16'],[20,'20'],[22,'22']],damage:[[1,'Sí'],[0,'No']],aids:[[1,'Sí'],[0,'No']],scOn:[[1,'Sí'],[0,'No']],weekend:[[1,'Sí'],[0,'No']],autoRep:[[1,'Sí'],[0,'No']],formation:[[1,'Sí'],[0,'No']],tod:[['day','Día'],['sunset','Atardecer'],['dusk','Anochece'],['night','Noche']],engMode:[['synth','Sintetizado'],['sample','Archivo propio']],incidents:[[0,'No'],[1,'Pocos'],[2,'Normal'],[3,'Muchos']],scModel:[['gt','GT blanco'],['blue','GT azul'],['white','Deportivo']],voice:[[1,'Con voz'],[0,'Solo texto']],steer:[['sim','Simulación'],['arcade','Arcade']]};
-function showOnly(id){['menu','settings','quick','champ','teams','pause','results','prerace','welcome'].forEach(x=>$(x).classList.toggle('hidden',x!==id));}
+function showOnly(id){['menu','settings','quick','champ','teams','pause','results','prerace','welcome','records'].forEach(x=>$(x).classList.toggle('hidden',x!==id));}
 
 function steerAdjHtml(){
   return `<div class="sl"><span>Sensibilidad al tocar</span><input type="range" min="1" max="10" step="1" value="${settings.steerSens}" data-ss="steerSens"><span class="v">${settings.steerSens}</span></div>
@@ -707,7 +707,7 @@ function openQuick(){
   <div class="hero"><div class="heroTrk">${trackSvg(ti,300,190)}</div><div class="heroInfo">
     <span class="fl">Circuito</span>${trackSelect('qTrack',ti)}
     <div class="stats"><div><b>${(inf.len/1000).toFixed(2).replace('.',',')}</b><span>km por vuelta</span></div><div><b>${inf.corners}</b><span>curvas</span></div>
-     <div><b>${((inf.len*settings.laps)/1000).toFixed(0)}</b><span>km de carrera</span></div><div>${lvlBars(Math.round(1+3*(T.wing||0.5)),4,'#b388ff')}<span>carga aerodinámica</span></div></div></div></div>
+     <div><b>${((inf.len*settings.laps)/1000).toFixed(0)}</b><span>km de carrera</span></div><div>${lvlBars(Math.round(1+3*(T.wing||0.5)),4,'#b388ff')}<span>carga aerodinámica</span></div></div>${recLine(ti)}</div></div>
   <div class="ess">
     ${stepHtml('Vueltas','settings','laps',OPT.laps)}${stepHtml('Coches','settings','cars',OPT.cars)}${stepHtml('Dificultad','settings','diff',OPT.diff)}${stepHtml('Clima','settings','weather',OPT.weather)}${stepHtml('Hora','settings','tod',OPT.tod)}
   </div>
@@ -1021,6 +1021,36 @@ function carLogo(c,size){return teamLogo(c.teamName||c.name,c.color,c.color2,siz
 // ---------- sesiones ----------
 function loadRecord(ti){const v=sget('minigp4_rec_'+ti,null);return typeof v==='number'?v:null;}
 function saveRecord(ti,v){sset('minigp4_rec_'+ti,v);}
+/* v63: tus récords por circuito, en seco y en mojado (agua media >0,1), con fecha; y la mejor vuelta de un bot en la última carrera
+   ahí (bot_dry / bot_wet). Clave por nombre del circuito. Los récords antiguos (un solo número) pasan como seco sin fecha.
+   Una vuelta con aviso de límites de pista no cuenta. */
+const RECK='minigp6_recs';
+function recsAll(){let r=sget(RECK,null);if(!r||typeof r!=='object'){r={};for(let i=0;i<TRACKS.length;i++){const v=loadRecord(i);if(v!=null)r[TRACKS[i].name]={dry:{t:v,date:null}};}sset(RECK,r);}return r;}
+function recOf(ti){return recsAll()[TRACKS[ti].name]||{};}
+function recToday(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function recCond(){return (R.meanWet||0)>0.1?'wet':'dry';}
+function recPlayerLap(time){const p=R.player;if(!p||p.bot||attract||!isFinite(time)||time<20)return false;
+  const bad=p.warns>(ui.recW0||0);ui.recW0=p.warns;if(bad)return false;
+  const k=recCond(),all=recsAll(),n=TRACKS[R.tr.ti].name,e=all[n]||(all[n]={});if(e[k]&&e[k].t<=time)return false;
+  e[k]={t:time,date:recToday(),diff:EV?EV.diff:null,comp:p.compound};sset(RECK,all);return true;}
+function recBots(){if(!R||R.mode!=='race'||!EV)return;const all=recsAll(),n=TRACKS[R.tr.ti].name,e=all[n]||(all[n]={}),best={};
+  for(const c of R.cars){if(c.isPlayer)continue;const lw=c.lapW||[];c.lapTimes.forEach((t,i)=>{if(i===0||!(t>20))return;const k=(lw[i]||0)>0.1?'wet':'dry';if(!best[k]||t<best[k].t)best[k]={t,name:c.name};});}
+  for(const k in best)e['bot_'+k]={t:best[k].t,name:best[k].name,diff:EV.diff,date:recToday()};if(Object.keys(best).length)sset(RECK,all);}
+const DIFF_TXT={facil:'Fácil',normal:'Normal',dificil:'Difícil',experto:'Experto',auto:'Adaptativa'};
+function fmtGap(d){return (d>0?'+':'−')+Math.abs(d).toFixed(2).replace('.',',')+' s';}
+/* línea para la carrera rápida: tu récord y el del mejor bot en este circuito */
+function recLine(ti){const e=recOf(ti),b=[];
+  if(e.dry)b.push('Seco <b>'+fmt(e.dry.t)+'</b>'+(e.bot_dry?' <small>('+fmtGap(e.dry.t-e.bot_dry.t)+' vs bots)</small>':''));
+  if(e.wet)b.push('Mojado <b>'+fmt(e.wet.t)+'</b>'+(e.bot_wet?' <small>('+fmtGap(e.wet.t-e.bot_wet.t)+' vs bots)</small>':''));
+  return '<div class="recline"><span class="fl">Tu récord</span>'+(b.length?b.join(' · '):'<small>Aún no tienes vuelta en este circuito</small>')+'</div>';}
+function openRecords(){const all=recsAll(),cell=(r,bot)=>r?'<b>'+fmt(r.t)+'</b>'+(r.date?'<small>'+r.date.split('-').reverse().join('/')+(r.diff&&!bot?' · '+(DIFF_TXT[r.diff]||''):'')+'</small>':''):'<span class="nil">—</span>';
+  const botc=(r,me)=>r?'<b>'+fmt(r.t)+'</b>'+(me?'<small class="'+(me.t<=r.t?'ok':'ko')+'">'+fmtGap(me.t-r.t)+'</small>':'')+'<small>'+esc(r.name)+' · '+(DIFF_TXT[r.diff]||'')+'</small>':'<span class="nil">—</span>';
+  const rows=TRACKS.map((t,i)=>({t,i,e:all[t.name]})).filter(x=>x.e&&(x.e.dry||x.e.wet||x.e.bot_dry||x.e.bot_wet));
+  $('recBody').innerHTML='<h2>Mis récords</h2><p class="sub">Tu mejor vuelta en cada circuito y la del bot más rápido en tu última carrera allí. Las vueltas con aviso por límites de pista no cuentan. Se guardan en este navegador.</p>'+
+    (rows.length?'<div class="rtwrap"><table class="rtab"><thead><tr><th>Circuito</th><th>Seco</th><th>Mejor bot</th><th>Mojado</th><th>Mejor bot</th></tr></thead><tbody>'+
+     rows.map(x=>'<tr><td>'+esc(x.t.name)+'</td><td>'+cell(x.e.dry)+'</td><td>'+botc(x.e.bot_dry,x.e.dry)+'</td><td>'+cell(x.e.wet)+'</td><td>'+botc(x.e.bot_wet,x.e.wet)+'</td></tr>').join('')+'</tbody></table></div>'
+     :'<p>Aún no hay vueltas. Corre una carrera y aparecerán aquí.</p>')+'<button class="go" id="recBack">Volver</button>';
+  $('recBack').onclick=openMenu;showOnly('records');}
 
 function startAttract(){
   const ti=Math.floor(Math.random()*TRACKS.length),est=simEstimate(ti,1,'sim');
@@ -1059,7 +1089,7 @@ function goQualiOrRace(){ // del fin de semana: tras los libres
 }
 function beginSession(r){
   R=r;attract=false;paused=false;particles.length=0;CONF.length=0;LENS.length=0;GOUGES.length=0;HLT.clips=[];HLT.pending=[];HLT.last={};HLT.pos=null;HLT.ahead=null;ui.hlPlay=null;RB.buf.length=0;R.steerCfg={gain:settings.steerSens,rate:settings.steerRate};
-  Object.assign(ui,{celebT:null,qFast:0,qSkip:false,rv:null,qEnding:false,tele:null,resultsShown:false,endT:null,hudT:0,resT:0,msgT:0,record:loadRecord(R.tr.ti),pointsDone:false});
+  Object.assign(ui,{celebT:null,qFast:0,qSkip:false,rv:null,qEnding:false,tele:null,resultsShown:false,endT:null,hudT:0,resT:0,msgT:0,record:loadRecord(R.tr.ti),recW0:0,pointsDone:false});
   cam.x=R.player.x;cam.y=R.player.y;cam.rot=-R.player.a-Math.PI/2;$('teleBox').innerHTML='';$('results').querySelector('.card').classList.remove('wide');
   showOnly(null);showHud(true);$('msg').style.display='none';
 }
@@ -1213,7 +1243,7 @@ const MICO={gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 $('bSettings').innerHTML=MICO.gear;$('bHelp').innerHTML=MICO.help;
 const fsLabel=()=>{const on=!!(document.fullscreenElement||document.webkitFullscreenElement);$('bFull').innerHTML=on?MICO.exit:MICO.full;$('bFull').title=on?'Salir de pantalla completa':!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?'Pantalla completa (instalar)':'Pantalla completa';};
 document.addEventListener('fullscreenchange',fsLabel);document.addEventListener('webkitfullscreenchange',fsLabel);fsLabel();
-$('bQuick').onclick=openQuick;$('bPlay').onclick=()=>quickPlay($('bPlay'));$('bHelp').onclick=openWelcome;$('bSettings').onclick=openSettings;$('setBack').onclick=openMenu;$('bChamp').onclick=()=>{if(CH&&CH.career)CH=sget('minigp4_champ',null);openChamp();};$('bCareer').onclick=openCareer;$('bTeams').onclick=openTeams;
+$('bQuick').onclick=openQuick;$('bPlay').onclick=()=>quickPlay($('bPlay'));$('bHelp').onclick=openWelcome;$('bSettings').onclick=openSettings;$('setBack').onclick=openMenu;$('bChamp').onclick=()=>{if(CH&&CH.career)CH=sget('minigp4_champ',null);openChamp();};$('bCareer').onclick=openCareer;$('bTeams').onclick=openTeams;$('bRecs').onclick=openRecords;
 
 // pedir box: el juego se pausa y eliges gomas y gasolina (PC y móvil)
 function openPitMenu(){
@@ -1480,7 +1510,7 @@ function fxFrame(dt){
     else if(ev.type==='y_pen'&&!attract){flash('Penalización +5 s','Adelantamiento con '+(ev.sc?'safety car':'bandera amarilla'),2.6);radioSay('Cinco segundos de sanción por adelantar con '+(ev.sc?'el safety car':'amarilla')+'.',null,0,true);}
     else if(ev.type==='sc_pen'&&!attract){flash('Penalización','Has adelantado a '+ev.who+' con safety car',2.4);radioSay('Nos han penalizado por adelantar con el safety car. Devuelve la posición la próxima vez.',null,0,true);}
     else if(ev.car&&ev.car.isPlayer&&!attract){
-      if(ev.type==='lap'){if(ghostLapDone(ev.time)&&R.mode==='quali')radioSay('Nueva mejor vuelta. El fantasma se actualiza.','gh',10);radioLap(ev.car);const rec=ui.record==null||ev.time<ui.record;flash(fmt(ev.time),rec?'¡Récord del circuito!':'Vuelta '+(ev.car.lap-1),2);}
+      if(ev.type==='lap'){if(ghostLapDone(ev.time)&&R.mode==='quali')radioSay('Nueva mejor vuelta. El fantasma se actualiza.','gh',10);radioLap(ev.car);const rec=recPlayerLap(ev.time);flash(fmt(ev.time),rec?'¡Tu récord'+(recCond()==='wet'?' en mojado':'')+'!':'Vuelta '+(ev.car.lap-1),2);}
       if(ev.type==='pitenter'){flash('Pit lane','Limitador automático · tu box se marca en amarillo',1.8);radioSay('Entras en boxes. Preparamos '+COMPOUNDS[ev.car.nextCompound].name.toLowerCase()+'.','pin',5,true);}
       if(ev.type==='pitmiss'){flash('Te has pasado la entrada','Seguimos fuera · BOX sigue pedido para la próxima vuelta',2);radioSay('Te has pasado la entrada a boxes. Lo intentamos la próxima vuelta.','pmiss',5,true);}
       if(ev.type==='pitstop'&&ev.car.pitFail){const F=ev.car.pitFail;radioSay(F.k==='nut'?'¡Problema con la tuerca '+F.w+'! Espera, espera…':F.k==='jack'?'¡El gato ha fallado! Cambiamos de gato…':F.k==='fuel'?'La manguera no engancha… espera.':F.k==='unsafe'?'Ojo, salida insegura: nos van a sancionar, cinco segundos.':'Parada hecha. ¡Vamos!','pit',20);}
@@ -3145,7 +3175,7 @@ function adaptLearn(){EV.adaptMsg='';if(!EV||!(EV.diff==='auto'||settings.adaptO
     const dl=nv-old;msg.push((wet?'en mojado ':'')+(Math.abs(dl)<0.002?'igual':(dl>0?'+':'')+(dl*100).toFixed(1).replace('.',',')+' %'));}
   if(!msg.length)return;settings.adaptN=n+1;saveSettings();EV.adaptMsg=' · bots: '+msg.join(', ')+' para la próxima';}
 function showRaceResults(){
-  finishAll();adaptLearn();
+  finishAll();adaptLearn();try{recBots();}catch(e){}
   try{$('board').innerHTML=boardHtml();}catch(e){} /* v46: el tablero de la izquierda pasa a mostrar la clasificación final */
   ui.resultsShown=true;
   applyChampResult();
