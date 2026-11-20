@@ -1320,7 +1320,7 @@ function physicsSim(R,c,dt){
   const v=Math.abs(vf),S=SURF[c.surf],massF=1+0.14*c.fuel/TANK;
   // v44: transferencia lateral de peso: mientras la carrocería se balancea al cambiar de apoyo (eses), el coche agarra algo menos (solo jugador)
   /* v62: pl0 = el jugador de verdad; pl = coches con la física del jugador (también los bots si BOTPL); AID = ayudas (los bots, siempre) */
-  const pl0=c.isPlayer&&!c.bot,pl=pl0||(BOTPL&&c.bot),AID=pl0?AID:true,mu=gripLat(c,v,R)*(pl?1-0.07*Math.min(1,(c.rollLag||0)/1.6):1);
+  const pl0=c.isPlayer&&!c.bot,pl=pl0||(BOTPL&&c.bot),AID=pl0?R.aids:true,mu=gripLat(c,v,R)*(pl?1-0.07*Math.min(1,(c.rollLag||0)/1.6):1);
   const thr=(c.fuel>0||c.pit)&&!c.dnf&&!c.engineDead?c.throttle:0;
   // --- longitudinal ---
   const skillP=c.isPlayer?1:Math.pow(c.skill,1.5);
