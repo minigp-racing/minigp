@@ -161,6 +161,16 @@ const PINE_SPR=[0,1].map(v=>{const R=rng(900+v),S=96,o=document.createElement('c
     gr.addColorStop(0,v?'#5f7d3a':'#587a38');gr.addColorStop(0.55,v?'#355a24':'#2f5420');gr.addColorStop(1,'#1d3414');g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill();}
   g.strokeStyle='rgba(150,180,100,.25)';g.lineWidth=0.8;for(let k=0;k<60;k++){const a=R()*Math.PI*2,d=R()*26,x=c+Math.cos(a)*d,y=c+Math.sin(a)*d*0.85;g.beginPath();g.moveTo(x,y);g.lineTo(x+(R()-0.5)*5,y+(R()-0.5)*5);g.stroke();}
   return o;});
+/* v60: conífera (vista desde arriba: estrella de ramas oscuras en capas) y palmera (hojas en abanico) */
+const CON_SPR=[0,1].map(v=>{const R=rng(500+v),S=96,o=document.createElement('canvas');o.width=o.height=S;const g=o.getContext('2d'),c=S/2;
+  for(let L=0;L<4;L++){const r=40-L*9,n=9+L;g.fillStyle=['#163a1c','#1d4a24','#265a2b','#2f6a33'][L];g.beginPath();for(let k=0;k<n*2;k++){const a=k/(n*2)*Math.PI*2+L*0.3+R()*0.1,rr=k%2?r*0.62:r;g.lineTo(c+Math.cos(a)*rr,c+Math.sin(a)*rr);}g.closePath();g.fill();}
+  g.fillStyle='rgba(180,220,150,.18)';for(let k=0;k<40;k++){const a=R()*6.28,d=R()*30;g.beginPath();g.arc(c+Math.cos(a)*d,c+Math.sin(a)*d,1,0,7);g.fill();}g.fillStyle='#3d2a18';g.beginPath();g.arc(c,c,2.5,0,7);g.fill();return o;});
+const PALM_SPR=[0,1].map(v=>{const R=rng(600+v),S=96,o=document.createElement('canvas');o.width=o.height=S;const g=o.getContext('2d'),c=S/2;g.lineCap='round';
+  const n=9+v;for(let k=0;k<n;k++){const a=k/n*Math.PI*2+R()*0.3,L=30+R()*10,ex=c+Math.cos(a)*L,ey=c+Math.sin(a)*L,mx=c+Math.cos(a+0.18)*L*0.55,my=c+Math.sin(a+0.18)*L*0.55;
+    g.strokeStyle=k%2?'#3f7a2a':'#4f8a32';g.lineWidth=7;g.beginPath();g.moveTo(c,c);g.quadraticCurveTo(mx,my,ex,ey);g.stroke();
+    g.strokeStyle='rgba(20,50,15,.6)';g.lineWidth=1;g.beginPath();g.moveTo(c,c);g.quadraticCurveTo(mx,my,ex,ey);g.stroke();
+    g.strokeStyle='#6aa040';g.lineWidth=1.2;for(let q=0.3;q<1;q+=0.12){const px=c+(ex-c)*q,py=c+(ey-c)*q,pa=a+Math.PI/2;g.beginPath();g.moveTo(px+Math.cos(pa)*5,py+Math.sin(pa)*5);g.lineTo(px-Math.cos(pa)*5,py-Math.sin(pa)*5);g.stroke();}}
+  g.fillStyle='#5b4326';g.beginPath();g.arc(c,c,4,0,7);g.fill();return o;});
 const TREE_SPR=[0,1,2,3].map(v=>{const R=rng(70+v),S=96,o=document.createElement('canvas');o.width=o.height=S;const g=o.getContext('2d'),c=S/2;
   const base=[[34,92,38],[28,84,34],[46,104,40],[38,86,30]][v];
   const lobes=[];for(let k=0;k<9;k++){const a=R()*Math.PI*2,d=R()*14;lobes.push([c+Math.cos(a)*d,c+Math.sin(a)*d,13+R()*9]);}
@@ -254,8 +264,29 @@ function gfxFor(tr){
    Todo determinista por circuito y comprobando que no pisa otro tramo de pista. */
 const BRANDS=['LITOSTONE','VELTRO','NORDA LUBE','KARVO','SOLENTA','AXIS FUEL'];
 const BRAND_COL={LITOSTONE:['#111317','#ffd400'],VELTRO:['#c62828','#ffffff'],'NORDA LUBE':['#0d47a1','#ffffff'],KARVO:['#1b5e20','#e8f5e9'],SOLENTA:['#ef6c00','#1a1a1a'],'AXIS FUEL':['#4a148c','#ffd54f']};
-const THEMES={'Montmeló':{pine:0.65,fields:['rgba(196,176,104,.8)','rgba(170,150,86,.78)','rgba(120,128,62,.75)','rgba(186,150,98,.72)','rgba(104,118,58,.7)'],camp:2}};
-function themeOf(tr){return THEMES[tr.name]||THEMES[tr.short]||null;}
+/* v60: paisaje propio de cada circuito. ground: tinte sobre el césped de fuera de pista; fields: colores de los campos;
+   trees: reparto de árboles (dec = de hoja ancha, pine = pino piñonero, con = conífera, palm = palmera); dens: cuántos árboles quedan */
+const BIOMES={
+  med:{woods:12,ground:'rgba(170,150,80,.22)',fields:['rgba(196,176,104,.8)','rgba(170,150,86,.78)','rgba(120,128,62,.75)','rgba(186,150,98,.72)','rgba(104,118,58,.7)'],trees:{pine:0.65,dec:0.35},dens:1,camp:2},
+  forest:{ftex:['grass','grass','grass','witgrass','grass'],woods:55,ground:'rgba(20,60,20,.16)',fields:['rgba(70,110,50,.8)','rgba(90,125,60,.78)','rgba(60,95,45,.75)','rgba(110,120,70,.72)','rgba(50,85,40,.7)'],trees:{con:0.7,dec:0.3},dens:1.8,camp:2},
+  alpine:{ftex:['grass','grass','grass','grass','witgrass'],woods:40,ground:'rgba(30,70,30,.12)',fields:['rgba(90,135,60,.8)','rgba(110,145,70,.78)','rgba(75,120,55,.75)','rgba(120,140,80,.72)','rgba(70,110,50,.7)'],trees:{con:0.85,dec:0.15},dens:1.4,camp:2},
+  park:{ftex:['grass','witgrass','grass','farm','grass'],woods:16,ground:'rgba(20,70,20,.10)',fields:['rgba(80,125,55,.8)','rgba(105,135,65,.78)','rgba(70,110,50,.75)','rgba(130,130,80,.72)','rgba(60,100,45,.7)'],trees:{dec:1},dens:1.5,camp:1},
+  farm:{woods:12,ground:null,fields:['rgba(124,138,62,.8)','rgba(178,164,98,.78)','rgba(88,116,50,.75)','rgba(132,104,72,.72)','rgba(64,104,48,.7)'],trees:{dec:0.9,con:0.1},dens:0.8,camp:2},
+  desert:{ftex:['dryfield','dryfield','dryfield','dryfield','dryfield'],ground:'rgba(214,180,120,.82)',fields:['rgba(222,190,130,.85)','rgba(205,170,110,.85)','rgba(230,205,150,.85)','rgba(190,160,105,.85)','rgba(215,185,125,.85)'],trees:{palm:1},dens:0.18,camp:0},
+  dunes:{ftex:['dryfield','witgrass','dryfield','witgrass','dryfield'],woods:8,ground:'rgba(200,180,120,.42)',fields:['rgba(205,190,135,.8)','rgba(150,160,95,.78)','rgba(190,175,120,.75)','rgba(120,140,80,.72)','rgba(210,195,140,.7)'],trees:{con:0.6,dec:0.4},dens:0.5,camp:2},
+  tropical:{ftex:['grass','grass','witgrass','grass','grass'],woods:30,ground:'rgba(10,80,30,.16)',fields:['rgba(60,120,50,.8)','rgba(80,135,55,.78)','rgba(50,105,45,.75)','rgba(95,125,60,.72)','rgba(45,95,40,.7)'],trees:{palm:0.55,dec:0.45},dens:1.6,camp:1},
+  savanna:{ftex:['witgrass','dryfield','witgrass','dryfield','witgrass'],woods:6,ground:'rgba(175,150,80,.32)',fields:['rgba(190,165,95,.8)','rgba(170,145,85,.78)','rgba(150,140,80,.75)','rgba(200,175,110,.72)','rgba(140,125,70,.7)'],trees:{pine:0.7,dec:0.3},dens:0.45,camp:2},
+  city:{ftex:['pitbox','pitbox','dryfield','grass','pitbox'],ground:'rgba(110,112,108,.38)',fields:['rgba(120,122,118,.75)','rgba(100,104,100,.75)','rgba(135,130,120,.75)','rgba(90,110,80,.7)','rgba(115,115,110,.75)'],trees:{palm:0.4,dec:0.6},dens:0.35,camp:0},
+  plain:{woods:8,ground:'rgba(120,120,60,.10)',fields:['rgba(150,150,80,.8)','rgba(120,140,70,.78)','rgba(170,160,95,.75)','rgba(100,125,60,.72)','rgba(140,130,80,.7)'],trees:{dec:1},dens:0.6,camp:2}};
+const TRACK_BIOME={'Montmeló':'med','Madring':'city','Jarama':'med','Paul Ricard':'med','Portimão':'med','Estoril':'med','Istanbul Park':'med','Mugello':'med',
+  'Spa-Francorchamps':'forest','Nürburgring':'forest','Watkins Glen':'forest','Red Bull Ring':'alpine','Hungaroring':'farm','Silverstone':'farm','Zandvoort':'dunes',
+  'Monza':'park','Imola':'park','Albert Park':'park','Interlagos':'park','México':'park','Buenos Aires':'park','Sochi':'park',
+  'Baréin':'desert','Losail':'desert','Yeda':'desert','Yas Marina':'desert','Sepang':'tropical','Jacarepaguá':'tropical','Kyalami':'savanna','COTA':'savanna',
+  'Las Vegas':'city','Shanghái':'plain','Indianápolis':'plain'};
+function themeOf(tr){if(!tr)return null;const k=TRACK_BIOME[tr.name]||TRACK_BIOME[tr.short]||(/Jarama/.test(tr.name)?'med':null);return k?BIOMES[k]:null;}
+/* árbol que toca en este circuito (o null si sobra, para paisajes con pocos árboles) */
+function treeKind(th,t){if(!th||!th.trees)return 'dec';const h=(t.s*7.31)%1,h2=(t.s*13.7+t.x*0.0007)%1;if(h2>Math.min(1,th.dens||1))return null;
+  let acc=0;for(const k in th.trees){acc+=th.trees[k];if(h<acc)return k;}return 'dec';}
 function decoFor(tr){const G=gfxFor(tr);if(G.deco)return G.deco;
   const N=tr.N,s=tr.pitSide,Rd=rng(tr.ti*1301+9),D={homes:[],tower:null,cranes:[],logos:[],bridges:[],flags:[],photogs:[],camps:[],grid:[],pitLines:[]};
   const at=(d,lat)=>{const i=((Math.round(d)%N)+N)%N;return {x:tr.xs[i]+tr.nx[i]*lat,y:tr.ys[i]+tr.ny[i]*lat,a:tr.ang[i],i};};
@@ -294,6 +325,10 @@ function decoFor(tr){const G=gfxFor(tr);if(G.deco)return G.deco;
       const md=minDist(tr,x,y,3);if(md<RUNOFF+260||md>RUNOFF+900)continue;if(tr.env&&tr.env.bld.some(q=>Math.hypot(q.x-x,q.y-y)<300))continue;k++;
       const C={x,y,tents:[],bbq:[]};for(let j=0;j<26;j++){const u=(Rd()-0.5)*420,v=(Rd()-0.5)*260;if(minDist(tr,x+u,y+v,3)<RUNOFF+200)continue;C.tents.push({x:x+u,y:y+v,a:(Rd()-0.5)*0.6,w:16+Rd()*14,c:['#2e7d32','#f57c00','#1565c0','#c62828','#fbc02d','#6a1b9a','#00838f'][Math.floor(Rd()*7)],car:Rd()<0.35});}
       for(let j=0;j<3;j++)C.bbq.push({x:x+(Rd()-0.5)*300,y:y+(Rd()-0.5)*180});D.camps.push(C);}}
+  /* v60: manchas de bosque (lejos de la pista, árboles juntos) según el paisaje */
+  {const th=themeOf(tr),nW=th&&th.woods||0,b=tr.bounds;D.woods=[];D.wpatch=[];if(nW)for(let k=0,tries=0;k<nW&&tries<nW*6;tries++){const r=180+Rd()*360,x=b.minX-900+Rd()*(b.maxX-b.minX+1800),y=b.minY-900+Rd()*(b.maxY-b.minY+1800);
+      if(tr.env&&tr.env.bld.some(q=>Math.hypot(q.x-x,q.y-y)<r+80))continue;if(minDist(tr,x,y,8)<RUNOFF+r+90)continue;k++;D.wpatch.push({x,y,r});
+      const n=Math.round(r*r/420);for(let j=0;j<n;j++){const a=Rd()*6.283,d=Math.sqrt(Rd())*r;D.woods.push({x:x+Math.cos(a)*d,y:y+Math.sin(a)*d,r:13+Rd()*12,s:Rd()});}}}
   return G.deco=D;}
 
 // ---------- sonido ----------
@@ -2136,7 +2171,7 @@ const ROOF_COL=['#9aa0a6','#b5603f','#d9d6cf','#6f757c'];
 function drawEnv(g,tr,bx0,by0,bx1,by1){
   const E=tr.env,vis=(x,y,r)=>x+r>bx0&&x-r<bx1&&y+r>by0&&y-r<by1;
   for(const f of E.fields){const r=Math.hypot(f.w,f.h)/2;if(!vis(f.x,f.y,r))continue;
-    g.save();g.translate(f.x,f.y);g.rotate(f.a);const ftx=settings.realtex!==0&&PATR[['witgrass','dryfield','farm','farm','witgrass'][f.t]];if(ftx){g.fillStyle=ftx;g.fillRect(-f.w/2,-f.h/2,f.w,f.h);g.globalAlpha=0.42;} /* v57: campo con textura real teñida */
+    g.save();g.translate(f.x,f.y);g.rotate(f.a);const ftx=settings.realtex!==0&&PATR[((themeOf(tr)||{}).ftex||['witgrass','dryfield','farm','farm','witgrass'])[f.t]];if(ftx){g.fillStyle=ftx;g.fillRect(-f.w/2,-f.h/2,f.w,f.h);g.globalAlpha=0.42;} /* v57: campo con textura real teñida */
     g.fillStyle=((themeOf(tr)||{}).fields||FIELD_COL)[f.t];g.fillRect(-f.w/2,-f.h/2,f.w,f.h);g.globalAlpha=1;
     if(f.st){g.strokeStyle='rgba(0,0,0,.07)';g.lineWidth=7;g.beginPath();for(let y=-f.h/2+6;y<f.h/2;y+=18){g.moveTo(-f.w/2,y);g.lineTo(f.w/2,y);}g.stroke();}
     g.strokeStyle='rgba(60,70,40,.35)';g.lineWidth=5;g.strokeRect(-f.w/2,-f.h/2,f.w,f.h);g.restore();}
@@ -2176,6 +2211,7 @@ function drawStatic(ctx,G,tr,bx0,by0,bx1,by1){ // capa estática del circuito (s
     const ix0=Math.max(P.x0,bx0),iy0=Math.max(P.y0,by0),ix1=Math.min(P.x1,bx1),iy1=Math.min(P.y1,by1);
     if(ix1>ix0&&iy1>iy0)ctx.drawImage(im,(ix0-P.x0)*sx,(iy0-P.y0)*sy,(ix1-ix0)*sx,(iy1-iy0)*sy,ix0,iy0,ix1-ix0,iy1-iy0);}}
   else{ /* v45: el césped no es uniforme: manchas grandes más claras y más oscuras */ if(PAT.grassVar){ctx.fillStyle=PAT.grassVar;ctx.fillRect(bx0,by0,bx1-bx0,by1-by0);}
+    {const th=themeOf(tr);if(th&&th.ground){ctx.fillStyle=th.ground;ctx.fillRect(bx0,by0,bx1-bx0,by1-by0);}} /* v60: suelo del paisaje (arena, hierba seca, ciudad…) */
     if(tr.env)drawEnv(ctx,tr,bx0,by0,bx1,by1);}
   const vis=G.chunks.filter(c=>c.x1>bx0&&c.x0<bx1&&c.y1>by0&&c.y0<by1);
   const S=(style,w,key,cap)=>{ctx.strokeStyle=style;ctx.lineWidth=w;if(cap)ctx.lineCap=cap;for(const c of vis)ctx.stroke(c[key]);};
@@ -2183,7 +2219,7 @@ function drawStatic(ctx,G,tr,bx0,by0,bx1,by1){ // capa estática del circuito (s
   if(!ph){
   // borde exterior de la escapatoria: sombra de la valla y franja de hierba recortada
   S('rgba(0,0,0,.18)',2*RUNOFF+26,'path');
-  S('#8f9296',2*RUNOFF+14,'path');S('#d8d8d8',2*RUNOFF+5,'path');S(PAT.runoff,2*RUNOFF,'path');
+  S('#8f9296',2*RUNOFF+14,'path');S('#d8d8d8',2*RUNOFF+5,'path');S(PAT.runoff,2*RUNOFF,'path');{const th=themeOf(tr);if(th&&th.ground)S(th.ground,2*RUNOFF,'path');} /* v60: la hierba junto a la pista también toma el color del paisaje */
   const RW=RUNOFF-28-W-KERB,RG=GRAV_OUT-W-KERB;
   S('rgba(80,62,30,.35)',RG+8,'grav','butt');S(PAT.gravel,RG,'grav');
   S('rgba(0,0,0,.18)',RW+6,'conc','butt');S(PAT.concrete,RW,'conc');S('rgba(255,255,255,.55)',2,'conc');
@@ -2230,6 +2266,11 @@ function drawStatic(ctx,G,tr,bx0,by0,bx1,by1){ // capa estática del circuito (s
 /* v55: decoración fija (va a las baldosas cacheadas) */
 function drawDecoStatic(ctx,G,tr,bx0,by0,bx1,by1){const D=decoFor(tr),SV=sunVec(),vis=(x,y,r)=>x+r>bx0&&x-r<bx1&&y+r>by0&&y-r<by1;
   const teamsOn={};if(R)for(const c of R.cars)teamsOn[c.team]=c;
+  /* v60: bosques (en las baldosas: no cuestan nada al dibujar cada fotograma) */
+  {const th=themeOf(tr);if(D.wpatch)for(const p of D.wpatch){if(!vis(p.x,p.y,p.r+40))continue;const g=ctx.createRadialGradient(p.x,p.y,p.r*0.5,p.x,p.y,p.r+30);g.addColorStop(0,'rgba(24,52,22,.85)');g.addColorStop(1,'rgba(24,52,22,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,p.r+30,0,6.283);ctx.fill();}
+    if(D.woods&&D.woods.length){const SVa=SV.a*0.5;for(const t of D.woods){if(!vis(t.x,t.y,40))continue;const kd=treeKind(Object.assign({},th,{dens:1}),t)||'dec',d=t.r*(kd==='pine'?2.9:kd==='palm'?2.4:kd==='con'?2.3:2.6);
+      ctx.fillStyle='rgba(0,0,0,'+SVa+')';ctx.beginPath();ctx.arc(t.x+SV.x*t.r/4,t.y+SV.y*t.r/4,t.r*0.85,0,6.283);ctx.fill();
+      ctx.drawImage(kd==='pine'?PINE_SPR[Math.floor(t.s*2)&1]:kd==='con'?CON_SPR[Math.floor(t.s*2)&1]:kd==='palm'?PALM_SPR[Math.floor(t.s*2)&1]:TREE_SPR[Math.floor(t.s*4)&3],t.x-d/2,t.y-d/2,d,d);}}}
   // pintura en el asfalto: parrilla, líneas del pit lane y logos de las escapatorias
   ctx.save();ctx.lineCap='butt';
   for(const g of D.grid){if(!vis(g.x,g.y,40))continue;ctx.save();ctx.translate(g.x,g.y);ctx.rotate(g.a);ctx.strokeStyle='rgba(245,245,245,.85)';ctx.lineWidth=2.4;
@@ -2425,8 +2466,10 @@ function render(dt){
   ctx.globalCompositeOperation='source-over';
   ctx.globalAlpha=1;
   for(const t of tr.trees){if(Math.abs(t.x-cam.x)>Rv||Math.abs(t.y-cam.y)>Rv)continue;
-    {const SV=sunVec(),k=t.r/4.2;ctx.fillStyle='rgba(0,0,0,'+(SV.a*0.6)+')';ctx.beginPath();ctx.ellipse(t.x+SV.x*k,t.y+SV.y*k,t.r*0.85+Math.abs(SV.x)*k*0.25,t.r*0.8,Math.atan2(SV.y,SV.x),0,Math.PI*2);ctx.fill();}
-    const th=themeOf(tr),pine=th&&th.pine&&((t.s*7.31)%1)<th.pine,d=t.r*(pine?2.9:2.6);ctx.drawImage(pine?PINE_SPR[Math.floor(t.s*2)&1]:TREE_SPR[Math.floor(t.s*4)&3],t.x-d/2,t.y-d/2,d,d);}
+    const th=themeOf(tr),kd=treeKind(th,t);if(!kd)continue;
+    const T2=(th&&th.dens>1&&((t.s*31.7)%1)<th.dens-1)?[t,{x:t.x+28*Math.cos(t.s*40),y:t.y+28*Math.sin(t.s*40),r:t.r*0.85,s:(t.s*3.3)%1}]:[t]; /* v60: bosques más densos */
+    for(const q of T2){{const SV=sunVec(),k=q.r/4.2;ctx.fillStyle='rgba(0,0,0,'+(SV.a*0.6)+')';ctx.beginPath();ctx.ellipse(q.x+SV.x*k,q.y+SV.y*k,q.r*0.85+Math.abs(SV.x)*k*0.25,q.r*0.8,Math.atan2(SV.y,SV.x),0,Math.PI*2);ctx.fill();}
+      const d=q.r*(kd==='pine'?2.9:kd==='palm'?2.4:kd==='con'?2.3:2.6);ctx.drawImage(kd==='pine'?PINE_SPR[Math.floor(q.s*2)&1]:kd==='con'?CON_SPR[Math.floor(q.s*2)&1]:kd==='palm'?PALM_SPR[Math.floor(q.s*2)&1]:TREE_SPR[Math.floor(q.s*4)&3],q.x-d/2,q.y-d/2,d,d);}}
   ctx.restore();
   drawLighting(cx,cy,rot,z,Rv);
   drawSunGlow();
@@ -2759,10 +2802,12 @@ function drawGauges(){
   ctx.save();ctx.shadowColor='#4fc3f7';ctx.shadowBlur=p.kersOn?10:0;ctx.fillStyle=p.kersOn?'#4fc3f7':'#1e88e5';ctx.fillRect(VW/2-34,ty-5,68*clamp(p.kers/4,0,1),10);ctx.restore();
   ctx.fillStyle='#fff';ctx.fillText('KERS',VW/2,ty+0.5);
   }
+  /* v61: si el mensaje del ingeniero está arriba, los avisos del lienzo (curva, coche parado, safety car, azul) bajan para no quedar debajo */
+  const RBO=(()=>{const el=document.getElementById('radio');if(!el||!el.classList.contains('on'))return 0;const b=el.getBoundingClientRect();if(b.top>VH*0.45||b.height<4)return 0;return Math.max(0,b.bottom+20-(COMPACT?(PORTRAIT?150:84):96)+15);})();
   // safety car en pista
-  if(R.sc&&R.sc.phase!=='gone'||R.sc&&R.sc.phase==='gone'){const fy=VH*0.12+40,on=(performance.now()/400|0)%2;ctx.save();ctx.shadowColor='#ffb300';ctx.shadowBlur=on?16:4;ctx.fillStyle='#ffcc00';ctx.fillRect(VW/2-58,fy-14,116,28);ctx.restore();
+  if(R.sc&&R.sc.phase!=='gone'||R.sc&&R.sc.phase==='gone'){const fy=VH*0.12+40+RBO,on=(performance.now()/400|0)%2;ctx.save();ctx.shadowColor='#ffb300';ctx.shadowBlur=on?16:4;ctx.fillStyle='#ffcc00';ctx.fillRect(VW/2-58,fy-14,116,28);ctx.restore();
     ctx.fillStyle='#111';ctx.font='900 15px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(R.sc.phase==='out'?'SAFETY CAR':'SC ENTRA',VW/2,fy+1);}
-  if(R.player.blue){const fx=VW/2,fy=VH*0.12+(R.sc?78:40),on=(performance.now()/300|0)%2;ctx.save();ctx.shadowColor='#2f7bff';ctx.shadowBlur=on?16:4;ctx.fillStyle='#1f6fff';ctx.fillRect(fx-80,fy-13,160,26);ctx.restore();
+  if(R.player.blue){const fx=VW/2,fy=VH*0.12+(R.sc?78:40)+RBO,on=(performance.now()/300|0)%2;ctx.save();ctx.shadowColor='#2f7bff';ctx.shadowBlur=on?16:4;ctx.fillStyle='#1f6fff';ctx.fillRect(fx-80,fy-13,160,26);ctx.restore();
     ctx.fillStyle='#fff';ctx.font='800 12px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('AZUL · deja pasar a '+R.player.blue.name.split(' ').pop(),fx,fy+1);}
   if(R.phase==='formation'){ctx.fillStyle='rgba(9,22,52,.82)';ctx.fillRect(VW/2-190,VH*0.5+50,380,40);ctx.fillStyle='#fff';ctx.font='700 13px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText('VUELTA DE FORMACIÓN · calentando gomas · '+(document.body.classList.contains('touch')?'toca la pantalla':'Espacio')+' para saltarla',VW/2,VH*0.5+70);}
@@ -2773,13 +2818,13 @@ function drawGauges(){
     ctx.fillStyle='#fff';ctx.font='700 11px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('SALIDA · da toques al acelerador para mantener las vueltas en verde',fx,fy-16);ctx.fillText(Math.round(r*1000)+' rpm',fx,fy+16);}
   // indicador de la curva siguiente (primeras vueltas, o siempre según Ajustes)
   {const mode=settings.cornerHint==null?1:settings.cornerHint;if(mode&&(mode===2||(p.lap||0)<=2)&&!p.pit&&(R.phase==='race'||R.phase==='quali'||R.mode==='quali')){const h=nextCorner(p);
-    if(h&&h.d<2200){const fx=VW/2,fy=COMPACT?(PORTRAIT?150:84):96,col=h.kind==='LENTA'?'#ff8a65':h.kind==='MEDIA'?'#ffd166':'#7ee0a1';
+    if(h&&h.d<2200){const fx=VW/2,fy=(COMPACT?(PORTRAIT?150:84):96)+RBO,col=h.kind==='LENTA'?'#ff8a65':h.kind==='MEDIA'?'#ffd166':'#7ee0a1';
       ctx.fillStyle='rgba(9,22,52,.82)';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(fx-105,fy-15,210,30,8);else ctx.rect(fx-105,fy-15,210,30);ctx.fill();
       ctx.fillStyle=col;ctx.font='900 20px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(h.dir>0?'↱':'↰',fx-82,fy+1);
       ctx.font='800 12px system-ui,sans-serif';ctx.fillText('CURVA '+h.kind,fx-14,fy-5);ctx.fillStyle='#fff';ctx.font='600 11px system-ui,sans-serif';ctx.fillText(Math.round(h.d*0.153)+' m · ~'+Math.round(h.v*KMH)+' km/h',fx-14,fy+8);
       const bar=clamp(1-h.d/2200,0,1);ctx.fillStyle='rgba(255,255,255,.15)';ctx.fillRect(fx+50,fy-4,45,8);ctx.fillStyle=col;ctx.fillRect(fx+50,fy-4,45*bar,8);}}}
   // aviso de peligro: coche parado o muy lento en la pista por delante
-  if(R.phase==='race'&&!p.pit){const h=hazardAhead(p);if(h){const m=Math.round(h.d*0.153),fx=VW/2,fy=(COMPACT?(PORTRAIT?186:118):132);
+  if(R.phase==='race'&&!p.pit){const h=hazardAhead(p);if(h){const m=Math.round(h.d*0.153),fx=VW/2,fy=(COMPACT?(PORTRAIT?186:118):132)+RBO;
     const bl=performance.now()%500<250;ctx.fillStyle=bl?'rgba(220,30,30,.92)':'rgba(150,20,20,.92)';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(fx-120,fy-14,240,28,8);else ctx.rect(fx-120,fy-14,240,28);ctx.fill();
     ctx.fillStyle='#fff';ctx.font='800 13px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('⚠ '+(h.o.dnf||h.o.wrecked?'COCHE PARADO':'COCHE LENTO')+' · '+m+' m · '+(h.side<0?'IZQ':h.side>0?'DCHA':'CENTRO'),fx,fy+1);
     if(!ui.hzT||ui.hzT<performance.now()){ui.hzT=performance.now()+6000;radioSay('¡Cuidado! '+(h.o.dnf||h.o.wrecked?'Coche parado':'Coche lento')+' en pista a '+m+' metros.','hz',4,true);vib([60,40,60]);}}}

@@ -292,10 +292,13 @@ function wetNeed(R,c){if(!R.weather||R.weather.type==='dry')return 0;const lap=(
    wxPlan: agua media que habrá en la pista (radar + secado/encharcado) cada 10 s durante ~3 vueltas (compartida, se recalcula cada 4 s).
    wxStint: segundos que se pierden con una goma durante el resto de la carrera; parar compensa si lo ganado supera la parada.
    Así, quien va con lluvia en un chaparrón que se acaba no para si quedan pocas vueltas o si la pista sigue mojada lo bastante. */
-let WXGAIN=3,WXK=0.55,UNDERCUT=true,UCLAPS=4,UCCOLD=1.0,REDPOW=640,REDWAIT=3.5;
+/* v61: los bots van más cerca del límite en curva (CNK0 en velocidad ≈ usar el 94 % del agarre en vez del 82 %) y aprenden curva a curva:
+   donde alguno se sale o desliza de más, todos levantan un poco ahí (R.cnk por tramos de 40 puntos, baja CNKD por salida, nunca por debajo de 1). */
+/* v61: la pista se seca más despacio (antes en ~1 min pasaba de encharcada a casi seca) */
+let DRYK=0.006,CNK0=1,CNKD=0.04,CNKMIN=1, /* v61: aprendizaje por curvas probado y desactivado (CNK0=1): no mejoraba en todos los circuitos */WXGAIN=5,WXK=0.55,UNDERCUT=true,UCLAPS=4,UCCOLD=1.0,REDPOW=640,REDWAIT=3.5;
 function wxPlan(R){const Wt=R.weather;if(R.wxP&&Math.abs(R.wxP.t-Wt.t)<4)return R.wxP;
   const lap=(R.est&&R.est.lap)||90,st=10,H=Math.max(200,lap*3.2);let w=R.meanWet||0,tg=w;const a=[w];
-  for(let t=st,i=1;t<=H;t+=st,i++){if(i%2===1)tg=forecastWet(R,[t]);w=clamp(w+(tg-w)*(tg>w?0.07:0.016)*st,0,1);a.push(w);}
+  for(let t=st,i=1;t<=H;t+=st,i++){if(i%2===1)tg=forecastWet(R,[t]);w=clamp(w+(tg-w)*(tg>w?0.07:DRYK)*st,0,1);a.push(w);}
   return R.wxP={t:Wt.t,st,a};}
 function wxAt(P,t){const i=Math.max(0,Math.round(t/P.st));return P.a[Math.min(i,P.a.length-1)];}
 function wxRisk(c){const T=c.traits||{},st=T.style;if(c.wxRisk==null)c.wxRisk=(st==='cuidadoso'?1.4:st==='metronomo'?1.2:st==='agresivo'?0.7:st==='irregular'?0.8:1)*(0.85+Math.random()*0.3);return c.wxRisk;}
@@ -331,7 +334,8 @@ function gapBehind(R,a,b){const tr=R.tr,da=(a.lap*tr.N+a.idx)-(b.lap*tr.N+b.idx)
 function wxStrategy(R,c){const d=wxDecide(R,c);if(!d)return;
   c.wxGain=d.stay-d.cost; // para pruebas
   if(c.pitReq&&!c.rainCall)return; // ya para por otra cosa: la goma la elige compoundFor al llegar
-  if(d.stay-d.cost>WXGAIN){if(!c.pitReq||c.nextCompound!==d.best){c.pitReq=true;c.rainCall=true;c.nextCompound=d.best;}}
+  const recent=c.lastStopLap!=null&&c.lap-c.lastStopLap<3; /* v61: recién parado, solo vuelve a entrar si gana mucho */
+  if(d.stay-d.cost>(recent?WXGAIN*4:WXGAIN)){if(!c.pitReq||c.nextCompound!==d.best){c.pitReq=true;c.rainCall=true;c.nextCompound=d.best;}}
   else if(c.rainCall&&!c.pit&&d.stay-d.cost<0){c.pitReq=false;c.rainCall=false;}}
 function forecastWet(R,times){const Wt=R.weather,tr=R.tr,t0=Wt.t;let m=0;Wt.fc=t0;
   for(const dt of times){Wt.t=t0+dt;let s=0,n=0;for(let i=0;i<tr.N;i+=6){s+=Math.min(1,rainAt(Wt,tr.xs[i],tr.ys[i],Wt.zoneS[i])*1.35);n++;}m=Math.max(m,s/n);}
@@ -345,7 +349,7 @@ function stepWeather(R,dt){
   for(let i=0;i<tr.N;i++){
     const r=rainAt(Wt,tr.xs[i],tr.ys[i],Wt.zoneS[i]);Wt.rainS[i]=r;
     const target=Math.min(1,r*1.35),w0=water[i];
-    water[i]=clamp(w0+(target-w0)*(target>w0?0.07:0.016)*h,0,1);sum+=water[i];
+    water[i]=clamp(w0+(target-w0)*(target>w0?0.07:DRYK)*h,0,1);sum+=water[i];
     if(r>0.15&&R.dry)R.dry[i]*=Math.exp(-0.35*r*h); // si vuelve a llover, la trazada se moja otra vez
   }
   R.meanWet=sum/tr.N;
@@ -647,7 +651,9 @@ function botControl(R,c,dt){
   /* v46: con poco agarre (mojado, gomas frías o equivocadas) el bot es más prudente que la raíz cuadrada: antes se salía un 10-20 % del tiempo */
   const wRel=wetFactor(c.compound,c.wet||0)*tyreTempF(c),gF=Math.sqrt(gRaw/(c.aqua>0?0.28:1))*(wRel<0.95?Math.pow(wRel,WGX-0.5):1);
   // en recta el agarre apenas limita (solo prudencia); en curva y frenada, sí
-  let target=vl0*c.skill*c.pace*slow*(WADAPT?1+WADAPT*clamp((R.meanWet||0)/0.3,0,1):1)*(vl0>=VMAX*1.02?Math.min(1,0.9+0.1*gF):gF);
+  if(!R.cnk){R.cnk=new Float32Array(Math.ceil(N/40)+1).fill(CNK0);}
+  let cnk=1;if(vl0<VMAX*0.98&&!underSC){cnk=9;const q0=Math.floor(((c.idx+2)%N)/40),nq=R.cnk.length-1;for(let q=0;q<5;q++)cnk=Math.min(cnk,R.cnk[(q0+q)%nq]);} /* lo aprendido de las curvas que vienen (la frenada empieza antes) */
+  let target=vl0*cnk*c.skill*c.pace*slow*(WADAPT?1+WADAPT*clamp((R.meanWet||0)/0.3,0,1):1)*(vl0>=VMAX*1.02?Math.min(1,0.9+0.1*gF):gF);
   /* v52: con charcos llenos por delante y gomas que no evacúan bastante, el bot levanta antes de llegar al umbral del aquaplaning
      (en Las Vegas con lluvia iban a 285 km/h con intermedios, hacían aquaplaning en la recta y se salían todos en la curva) */
   if(AQUAK>0&&c.compound!=='W'&&tr.pudAt&&R.water&&!underSC){const thr=(c.compound==='I'?400:290)*AQUAK;if(vf>thr*0.9){for(let k=0;k<90;k+=3){const L=tr.pudAt.get((c.idx+k)%N);if(!L)continue;let hit=false;for(const q of L){const p=tr.puddles[q];if(R.water[p.i]>=p.th*0.9){hit=true;break;}}if(hit){target=Math.min(target,Math.sqrt(thr*thr+2*BOTDEC*G*1.2*k*tr.sp));break;}}}}
@@ -753,7 +759,7 @@ function pitControl(R,c,dt){
     {const bi=((Math.round(boxD(c.slot))%N)+N)%N,bx=tr.xs[bi]+tr.nx[bi]*tr.pitSide*PIT_BOX,by=tr.ys[bi]+tr.ny[bi]*tr.pitSide*PIT_BOX,k=Math.min(1,4*dt);
      c.x+=(bx-c.x)*k;c.y+=(by-c.y)*k;c.a+=angNorm(tr.ang[bi]-c.a)*k;}
     if(c.pitT<=0&&R.liveQ){c.qLaps=0;if(c.bot){const w=R.meanWet||0;c.nextCompound=w>0.62?'W':w>0.2?'I':'S';}}
-    if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?58:80; /* v54: mantas térmicas (antes salían a 50/68 °C, −7 % de agarre: el undercut casi nunca salía) */c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;if(c.dWing>0.15&&c.fixNose!==false)c.dWing=0;c.fixNose=null;if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.pittedThisLap=true;c.pit='out';
+    if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?58:80; /* v54: mantas térmicas (antes salían a 50/68 °C, −7 % de agarre: el undercut casi nunca salía) */c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;if(c.dWing>0.15&&c.fixNose!==false)c.dWing=0;c.fixNose=null;if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.lastStopLap=c.lap;c.pittedThisLap=true;c.pit='out';
       // v45: las averías (aceite, frenos) ya no se arreglan en boxes: solo el morro
       if(c.looseW!=null){c.looseAt=R.t+3+Math.random()*9;}
       if(R.fx)R.events.push({type:'pitdone',car:c});}
@@ -793,7 +799,7 @@ function pitControl(R,c,dt){
   }
   speedCtl(c,vf,target);
 }
-function startService(R,c,vf){{c.pit='service';c.pitLineX=false;c.rainCall=false;if(c.bot&&R.mode==='race'){const k=compoundFor(R,c,c.nextCompound);if(!(c.rainCall&&k===c.compound))c.nextCompound=k;} /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitFail=null;if(R.mode==='race'&&!R.liveQ)pitMishap(R,c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
+function startService(R,c,vf){{c.pit='service';c.pitLineX=false;const wasRain=c.rainCall;c.rainCall=false;if(c.bot&&R.mode==='race'&&!wasRain){c.nextCompound=compoundFor(R,c,c.nextCompound);} /* v61: si paró por el tiempo, monta la goma que se decidió al llamarle (antes se recalculaba y a veces volvía a montar la misma) */ /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitFail=null;if(R.mode==='race'&&!R.liveQ)pitMishap(R,c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
       if(R.liveQ){c.fuelAdd=0;c.pitReq=false;c.qFly=false;const L=R.liveQ,nx=c.qRuns?c.qRuns[++c.qRun]:null;c.pitT=(!c.bot||L.flag||c.qDone||nx==null)?1e9:Math.max(3,nx-L.t);c.pitTotal=c.pitT;}
       if(R.fx)R.events.push({type:'pitstop',car:c});}
 }
@@ -1334,7 +1340,8 @@ function scTrigger(R,c,force){
   const tr=R.tr,N=tr.N,s0=lead.idx+45;
   R.sc={phase:'out',s:s0%N,lap:lead.lap+Math.floor(s0/N),v:0,x:tr.xs[s0%N],y:tr.ys[s0%N],a:tr.ang[s0%N],t0:R.t,leadLap0:lead.lap,clear:false,pens:{}};
   R.scCount=(R.scCount||0)+1;
-  for(const o of R.cars)if(o.bot&&!o.dnf&&!o.finished){const left=lapsLeft(R,o),wpl=o.wearPerLap||R.est.wear;if(left>2&&(o.wear>0.35||o.wear+left*wpl>0.85)){o.pitReq=true;o.nextCompound=compoundFor(R,o,chooseCompound(left-1,R.est,Math.random()));}}
+  /* v61: parada aprovechando el safety car solo si de verdad la necesitaba (gomas gastadas o que no llegan) y no ha parado hace poco; antes paraban con gomas casi nuevas */
+  for(const o of R.cars)if(o.bot&&!o.dnf&&!o.finished){const left=lapsLeft(R,o),wpl=o.wearPerLap||R.est.wear,recent=o.lastStopLap!=null&&o.lap-o.lastStopLap<3;if(left>2&&!recent&&(o.wear>0.45||(o.wear>0.22&&o.wear+left*wpl>0.95))){o.pitReq=true;o.nextCompound=compoundFor(R,o,chooseCompound(left-1,R.est,Math.random()));}}
   if(R.fx)R.events.push({type:'sc_out'});
 }
 function scProg(R){return R.sc?R.sc.lap*R.tr.N+Math.floor(R.sc.s):0;}
@@ -1498,7 +1505,7 @@ function stepRace(R,dt){
       const lim=inLane?wl+HW+3:wl-HW-3,bad=inLane?sl<lim:sl>lim;
       if(bad&&Math.abs(sl-wl)<40){const push=(lim-sl)*tr.pitSide;c.x+=tr.nx[c.idx]*push;c.y+=tr.ny[c.idx]*push;c.lat+=push;
         const nvx=tr.nx[c.idx],nvy=tr.ny[c.idx],vn=c.vx*nvx+c.vy*nvy;if(vn*push<0){c.vx-=1.3*vn*nvx;c.vy-=1.3*vn*nvy;c.vx*=0.9;c.vy*=0.9;if(Math.abs(vn)>60&&R.fx)R.events.push({type:'hit',x:c.x,y:c.y,power:Math.abs(vn),player:c.isPlayer});if(Math.abs(vn)>140&&R.damage)hurt(R,c,Math.abs(vn),0,1);}}}}
-    c.off=al>W+kw&&!onPit;
+    {const wasOff=c.off;c.off=al>W+kw&&!onPit;if(c.off&&!wasOff&&c.bot&&R.cnk&&R.phase==='race'&&!c.dnf){for(const dj of [0,-25]){const q=Math.floor((((c.idx+dj)%N)+N)%N/40);R.cnk[q]=Math.max(CNKMIN,R.cnk[q]-CNKD);}}}
     if(onPit||al<=W)c.surf='asphalt';else if(al<=W+kw)c.surf=tr.corner[c.idx]?'kerb':'asphalt';
     else{const os=tr.outSurf[c.idx],out=Math.sign(c.lat)===tr.outSide[c.idx];c.surf=out&&os&&al<=(os===2?RUNOFF-28:GRAV_OUT)?(os===2?'concrete':'gravel'):'grass';}
     // límites de pista (jugador): solo cuenta si sale con las cuatro ruedas Y gana tiempo respecto a lo posible por dentro de la pista
@@ -1560,7 +1567,11 @@ function stepRace(R,dt){
       const pv=Math.hypot(p.vx,p.vy);if(p.off||p.recover>0||(!scOn&&pv<60))Y.offT=R.t;
       const mine=R.t-(Y.offT||-99)<6;
       const inY=scOn?!(p.off||p.recover>0||p.unlap):!mine&&R.yellow.some(y=>{const d=(y-p.idx+N)%N;return d<110||d>N-45;});
+      /* v61: si te sales de pista (o trompeas) con SC o amarilla, los que te pasan mientras tanto se apuntan: recuperar esos puestos no se sanciona */
+      const offNow=p.off||p.recover>0||p.ooc>R.t||R.t-(Y.offT||-99)<3;Y.regain=Y.regain||{};
       for(const o of cars){if(o===p||o.dnf||o.finished)continue;const ahead=o.prog>p.prog;if(o.pit){Y.prev[o.id]=ahead;continue;}
+        if(offNow&&ahead&&Y.prev[o.id]===false)Y.regain[o.id]=R.t+90;
+        if(Y.prev[o.id]===true&&!ahead&&Y.regain[o.id]&&R.t<Y.regain[o.id]){delete Y.regain[o.id];Y.prev[o.id]=ahead;continue;}
         const oSlow=o.off||o.recover>0||o.engineDead||o.ooc>R.t||(!scOn&&Math.hypot(o.vx,o.vy)<0.6*Math.max(80,pv));
         if(Math.abs(o.prog-p.prog)<2)continue; // rueda con rueda: aún no hay adelantamiento
         if(Y.prev[o.id]===true&&!ahead&&inY&&!oSlow&&!Y.owe&&!(R.t<(Y.cool&&Y.cool[o.id]||0))&&Math.abs(p.prog-o.prog)<60){Y.owe={id:o.id,t:R.t,who:o.name,sc:scOn};o.reclaim={id:p.id,until:R.t+12};if(R.fx)R.events.push({type:'y_warn',car:p,who:o.name,sc:scOn});}
