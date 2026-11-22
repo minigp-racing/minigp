@@ -15,7 +15,7 @@ function gripLat(c,v,R){ // aceleración lateral máxima (px/s²)
   const wf=0.75+0.5*(c.wing==null?0.5:c.wing),S=SURF[c.surf];
   const cf=c.cf||{aero:1,mech:1};
   const aero=AERO*cf.aero*wf*Math.min(1.2,(v/VMAX)*(v/VMAX))*(paved(c.surf)?1:0.3)/(1+0.14*c.fuel/TANK);
-  return G*(MECH*cf.mech*S.grip*trackGrip(R,c)+aero)*tyreGrip(c)*(1-0.15*c.dWing)*(1-0.12*c.dSusp)*(c.punct&&c.wheelOff==null?0.55:1)*(c.ooc>R.t?0.5:1)*(c.wrecked&&!c.cleared?0.12:1);
+  return G*(MECH*cf.mech*S.grip*trackGrip(R,c)+aero)*tyreGrip(c)*(1-0.15*c.dWing)*(1-0.12*c.dSusp)*(c.punct&&c.wheelOff==null?0.55:1)*(c.ooc>R.t?0.5:1)*(c.wrecked&&!c.cleared?0.12:1)*(WGRIP&&c.isPlayer&&!c.bot&&paved(c.surf)?1-WGRIP*Math.min(1,(c.wet||0)*1.6):1); /* v65: el agua en el asfalto también resta agarre (solo jugador; los bots ya tienen su ritmo de mojado medido) */
 }
 // v45: temperatura (c.bT, °C) y desgaste (c.bW, 0-1) de los frenos de carbono.
 // Fríos (<250 °C) muerden menos; muy calientes (>950 °C) pierden eficacia; gastados, algo menos de frenada.
@@ -43,7 +43,7 @@ const COMPOUNDS={
 function wetFactor(comp,w){
   if(comp==='I')return 0.82+0.06*Math.min(w/0.35,1)-0.2*Math.max(0,w-0.6)/0.4;
   if(comp==='W')return 0.74+0.10*Math.min(w/0.6,1);
-  return 1-0.3*Math.min(w,1); // con secos en mojado: resbala bastante, pero el peligro real es el aquaplaning en los charcos
+  return 1-0.3*Math.min(w,1)-SLICKW*Math.max(0,Math.min(w,1)-0.3); /* v65: con lluvia fuerte los lisos apenas agarran (con 0,7 de agua ~0,6; encharcado ~0,4) */ // con secos en mojado: resbala bastante, pero el peligro real es el aquaplaning en los charcos
 }
 function wingAero(c,s){return 1+((c.wing==null?0.5:c.wing)-0.5)*0.45*Math.min(1,(s/VMAX)*(s/VMAX));}
 const SURF={asphalt:{grip:1,drag:0.1},kerb:{grip:0.96,drag:0.12},concrete:{grip:0.86,drag:0.14},grass:{grip:0.42,drag:1.3},gravel:{grip:0.3,drag:2.6}};
@@ -295,7 +295,9 @@ function wetNeed(R,c){if(!R.weather||R.weather.type==='dry')return 0;const lap=(
 /* v61: los bots van más cerca del límite en curva (CNK0 en velocidad ≈ usar el 94 % del agarre en vez del 82 %) y aprenden curva a curva:
    donde alguno se sale o desliza de más, todos levantan un poco ahí (R.cnk por tramos de 40 puntos, baja CNKD por salida, nunca por debajo de 1). */
 /* v61: la pista se seca más despacio (antes en ~1 min pasaba de encharcada a casi seca) */
-let HAZ=1,HAZD=70,HAZV=200,HAZA=230,PITHIT=1,WOSCR=0.12,WOAX=0.6,SCDEC=110,SCPASS=4,BOTGK=2, BOTPL=1, /* v62: bots con la física del jugador */ HITYK0=25,HITYM0=1.0,HITMU=0.45,PUNT0=45,PUNTW=150, /* v62: golpes */ DRYK=0.006,CNK0=1,CNKD=0.04,CNKMIN=1, /* v61: aprendizaje por curvas probado y desactivado (CNK0=1): no mejoraba en todos los circuitos */WXGAIN=5,WXK=0.55,UNDERCUT=true,UCLAPS=4,UCCOLD=1.0,REDPOW=640,REDWAIT=3.5;
+/* v65: duración de cada sesión de clasificación según la vuelta del circuito (los minutos elegidos valen para una vuelta de 90 s; como mínimo 3,3 vueltas) */
+function qTimeFor(lap,min){return Math.round(Math.max(min*60*Math.max(1,lap/90),3.3*lap));}
+let HITE=0.22,SLICKW=0.45,SLK=0.3,SLKW=0.2,WGRIP=0.12,WLOCK=1,WSLIDE=0.22,PITCLOSE=35,QGAP=4,HAZ=1,HAZD=70,HAZV=200,HAZA=230,PITHIT=1,WOSCR=0.12,WOAX=0.6,SCDEC=110,SCPASS=4,BOTGK=2, BOTPL=1, /* v62: bots con la física del jugador */ HITYK0=25,HITYM0=1.0,HITMU=0.45,PUNT0=45,PUNTW=150, /* v62: golpes */ DRYK=0.006,CNK0=1,CNKD=0.04,CNKMIN=1, /* v61: aprendizaje por curvas probado y desactivado (CNK0=1): no mejoraba en todos los circuitos */WXGAIN=5,WXK=0.55,UNDERCUT=true,UCLAPS=4,UCCOLD=1.0,REDPOW=640,REDWAIT=3.5;
 function wxPlan(R){const Wt=R.weather;if(R.wxP&&Math.abs(R.wxP.t-Wt.t)<4)return R.wxP;
   const lap=(R.est&&R.est.lap)||90,st=10,H=Math.max(200,lap*3.2);let w=R.meanWet||0,tg=w;const a=[w];
   for(let t=st,i=1;t<=H;t+=st,i++){if(i%2===1)tg=forecastWet(R,[t]);w=clamp(w+(tg-w)*(tg>w?0.07:DRYK)*st,0,1);a.push(w);}
@@ -365,6 +367,14 @@ function locate(tr,c){
   for(let d=-40;d<=40;d++){const i=(c.idx+d+tr.N)%tr.N;const dx=c.x-tr.xs[i],dy=c.y-tr.ys[i];const q=dx*dx+dy*dy;if(q<best){best=q;bi=i;}}
   c.idx=bi;c.lat=(c.x-tr.xs[bi])*tr.nx[bi]+(c.y-tr.ys[bi])*tr.ny[bi];
 }
+/* v65: accidente en el pit lane → se cierra (semáforo rojo en la entrada) hasta que retiran el coche y los restos (PITCLOSE s).
+   Los bots no entran; si entras tú en carrera, +10 s. Lo que ya estaba dentro sigue. */
+function pitClosure(R){if(!(R.mode==='race'||R.liveQ)||R.phase==='formation')return;const tr=R.tr;
+  for(const c of R.cars){if(c.gone||c.pcDone||!c.dnf)continue;if(!c.wrecked&&Math.hypot(c.vx,c.vy)>20)continue;if(!onPitLane(tr,c))continue;
+    c.pcDone=true;const until=R.t+PITCLOSE;if(!R.pitClosed){R.pitClosed={until,who:c.name};if(R.fx)R.events.push({type:'pit_closed',car:c});}else R.pitClosed.until=Math.max(R.pitClosed.until,until);
+    c.cleared=true;c.clearAt=R.pitClosed.until-2;
+    if(R.debris)for(const d of R.debris){const dd=dOf(tr,d.idx);if(d.clearAt==null&&dd>-(PITL+PITE+4)&&dd<PITL+PITE+4&&d.lat*tr.pitSide>W-5)d.clearAt=R.pitClosed.until-2-Math.random()*6;}}
+  if(R.pitClosed&&R.t>R.pitClosed.until){R.pitClosed=null;if(R.fx)R.events.push({type:'pit_open'});}}
 function onPitLane(tr,c){const d=dOf(tr,c.idx);if(d<-(PITL+PITE+2)||d>PITL+PITE+2)return false;const sl=c.lat*tr.pitSide;if(d>=-(PITL+2)&&d<=PITL+2)return sl>W-5&&sl<PIT_BOX+24;return Math.abs(sl-lpPit(d))<PIT_HALF+4;}
 
 const DIFF={facil:[0.84,0.93],normal:[0.91,0.985],dificil:[0.96,1.035],experto:[1.0,1.06]};
@@ -488,13 +498,16 @@ function makeSession(cfg){
   R.player=cars.find(c=>c.isPlayer)||cars[0];
   /* v45: clasificación en directo: todos los coches empiezan en su garaje; el jugador decide cuándo salir;
      los bots salen según un plan (unos pronto, otros con la pista más engomada) y ruedan hasta la bandera a cuadros */
-  if(cfg.mode==='quali'&&cfg.liveQ){const T=cfg.qTime||300,lap=(cfg.est&&cfg.est.lap)||100;R.liveQ={T,t:0,flag:false,end:false,lap};R.practice=false;
+  if(cfg.mode==='quali'&&cfg.liveQ){const T=cfg.qMin?qTimeFor((cfg.est&&cfg.est.lap)||100,cfg.qMin):(cfg.qTime||300),lap=(cfg.est&&cfg.est.lap)||100;R.liveQ={T,t:0,flag:false,end:false,lap};R.practice=false;
     for(const c of cars){const bi=((Math.round(boxD(c.slot))%tr.N)+tr.N)%tr.N;c.x=tr.xs[bi]+tr.nx[bi]*tr.pitSide*PIT_BOX;c.y=tr.ys[bi]+tr.ny[bi]*tr.pitSide*PIT_BOX;c.a=tr.ang[bi];c.vx=c.vy=0;
       locate(tr,c);c.prog=c.idx;c.lap=0;c.pit='service';c.fuel=Math.min(c.fuel,15);c.fuelAdd=0;c.qFly=false;c.qLaps=0;c.qRun=0;
       if(c.isPlayer&&!c.bot){c.qRuns=[];c.pitT=1e9;}
       else{const two=T>=4.6*lap,late=Math.max(0,T-2.15*lap),r1=two?Math.random()*0.18*T:Math.random()*late,r2=two?Math.max(r1+3*lap,T-2.3*lap+Math.random()*0.3*lap):null;
         c.qRuns=r2!=null?[r1,r2]:[r1];c.pitT=Math.max(1,r1);}
-      c.pitTotal=c.pitT;}}
+      c.pitTotal=c.pitT;}
+    /* v65: que no salgan todos a la vez del garaje (en Spa con 5 min salían todos en los primeros segundos y se amontonaban) */
+    const bq=cars.filter(c=>c.qRuns&&c.qRuns.length).sort((a,b)=>a.qRuns[0]-b.qRuns[0]);let pr=-9;
+    for(const c of bq){const r=Math.max(c.qRuns[0],pr+QGAP);c.qRuns[0]=r;pr=r;c.pitT=c.pitTotal=Math.max(1,r);if(c.qRuns[1]!=null&&c.qRuns[1]<r+3*lap)c.qRuns.length=1;}}
   if(cfg.mode==='race'){R.rolling=cfg.weather==='rain'&&(cfg.rollingStart!==false)&&Math.random()<0.6;if(cfg.formation&&!R.rolling){R.phase='formation';R.form={t:0};}}
   const tw=TRACKS[cfg.track].wing;
   const tg=TRACKS[cfg.track].gear;
@@ -797,7 +810,8 @@ function pitControl(R,c,dt){
     if(d>=-PITL-5)target=Math.min(target,Math.sqrt(Math.max(0,2*450*(rem-4))));
     if((rem<9&&Math.abs(vf)<30)||rem<-15)startService(R,c,vf);
   }else{
-    target=d<PITL?PIT_V:(SIMB?tr.vLimS:tr.vLim)[(c.idx+2)%N]*0.92; /* v64: al salir del pit lane respeta la curva que viene (antes iba a fondo: en Spa llegaban pasados a la primera curva y se salían) */
+    const jo=(c.idx+2)%N,wvo=clamp((c.wet||0)*1.6,0,1),vlo=SIMB&&tr.vWet&&wvo>0.02?tr.vLimS[jo]*(1-wvo)+tr.vWet[jo]*wvo:(SIMB?tr.vLimS:tr.vLim)[jo],wro=wetFactor(c.compound,c.wet||0)*tyreTempF(c);
+    target=d<PITL?PIT_V:vlo*0.92*Math.sqrt(Math.min(1.05,tyreGrip(c)))*(wro<0.95?Math.pow(wro,WGX-0.5):1); /* v65: también con agua y gomas frías (en Spa mojado salían a velocidad de seco hacia La Source y se amontonaban) */ /* v64: al salir del pit lane respeta la curva que viene (antes iba a fondo: en Spa llegaban pasados a la primera curva y se salían) */
     if(d>PITL+PITE+2){c.pit=null;c.pitReq=false;}
   }
   /* v64: en el pit lane se guarda la distancia con el de delante (ahora hay contacto) */
@@ -926,25 +940,28 @@ function physicsSim(R,c,dt){
   if(pl)c.spinW=(c.spinW||0)+(spinT-(c.spinW||0))*Math.min(1,(spinT>(c.spinW||0)?14:6)*dt);
   // frenada que supera el agarre: bloqueo
   /* v49: con ayudas el jugador lleva ABS: la frenada se queda en el límite sin bloquear (ni marcas ni plano) */
+  /* v65 (solo jugador): con agua, bloquear es mucho más fácil y se nota: delanteras bloqueadas = el coche se va recto; si bloquea también detrás, trompo */
+  const wvP=pl0&&paved(c.surf)?clamp((c.wet||0)*1.6,0,1):0,brkDem=brk*0.65;
   const absP=pl&&AID;let lock=0;if(-FxF>muF*0.98){lock=absP?0:1;FxF=-muF*0.95;}if(-FxR>muR*0.98){lock=absP?0:1;FxR=Math.max(FxR,-muR*0.95);}
   // jugador: si mantiene el freno a fondo cuando ya ha bajado la velocidad (menos carga aerodinámica), bloquea.
   // Hay que soltar un poco al final de la frenada. Con ayudas bloquea más tarde y más suave.
   if(c.isPlayer&&!c.bot){
-    c.brakeHold=c.brake>0.92&&vf>20?(c.brakeHold||0)+dt:0;
+    c.brakeHold=c.brake>0.92&&vf>20?(c.brakeHold||0)+dt*(1+WLOCK*wvP*(brkDem>muF*1.1?3:1)):0;
     const lockV=(AID?160:260)*(0.8+0.4*(c.brakeS==null?0.5:c.brakeS))*(c.bT>950?1+Math.min(0.35,(c.bT-950)/400):c.bT<220?1.2:1); // v45: frenos calientes o fríos: bloquea antes // ~90 / ~145 km/h; más freno en el reglaje: bloquea antes
-    if(c.brakeHold>0.45&&v<lockV&&!AID){c.lockUp=true;}else if(c.brake<0.75||vf<15)c.lockUp=false;
-    if(c.lockUp){lock=1;const k=AID?0.85:0.72;FxF=-muF*k;FxR=Math.max(FxR,-muR*k);c.lockF=AID?0.45:0.2;
-      if(R.mult)c.wear=Math.min(1,c.wear+0.004*R.mult*dt);}else c.lockF=0;
+    if(c.brakeHold>0.45&&v<lockV*(1+WLOCK*wvP*(brkDem>muF*1.1?3:0.5))&&!AID){c.lockUp=true;}else if(c.brake<0.75||vf<15)c.lockUp=false;
+    if(c.lockUp){lock=1;const k=AID?0.85:0.72;FxF=-muF*k;FxR=Math.max(FxR,-muR*k);c.lockF=AID?0.45:0.2*(1-0.5*wvP);c.lockR=wvP>0.15&&brk*0.35>muR*0.8;
+      if(R.mult)c.wear=Math.min(1,c.wear+0.004*R.mult*dt);}else{c.lockF=0;c.lockR=false;}
   }
   ax=FxF+FxR-resist+(ax);
   // --- lateral ---
   const del=c.steer*delMax(c,v,R)*(vf>=0?1:-1)+(c.dSusp>0?c.dSusp*0.02*c.suspSide:0)+(wo!=null?0.035*c.suspSide:0);c.wa=del*(vf>=0?1:-1); /* v64: ángulo de las ruedas delanteras (para dibujarlas) */
   // v44 (solo jugador): al levantar el pie el peso pasa delante y el morro entra mejor; el tren delantero responde antes
   if(pl){const lift=thr<0.25&&!braking&&v>V_DYN?1:0;c.liftK=(c.liftK||0)+(lift-(c.liftK||0))*Math.min(1,(lift?7:4)*dt);}
-  const latF=(c.lockF?c.lockF:1)*Math.sqrt(Math.max(muF*muF-FxF*FxF,0.12*muF*muF))*(pl?1+0.08*c.liftK:1),latR=Math.sqrt(Math.max(muR*muR-FxR*FxR,(abs?0.36:0.1)*muR*muR))*(pl&&!AID?1-0.35*(c.spinW||0):1);
+  const latF=(c.lockF?c.lockF:1)*Math.sqrt(Math.max(muF*muF-FxF*FxF,0.12*muF*muF))*(pl?1+0.08*c.liftK:1),latR=Math.sqrt(Math.max(muR*muR-FxR*FxR,(abs?0.36:0.1)*muR*muR))*(pl&&!AID?1-0.35*(c.spinW||0):1)*(c.lockR&&pl0?0.35:1);
   const CSf=pl?CS*1.2:CS;
   let slide=0;
-  if(v<V_DYN||vf<-2){ /* v64: marcha atrás siempre con el modelo cinemático (con el dinámico derrapaba de lado y era caótico) */
+  const vt0=Math.hypot(vf,vl);
+  if(vt0<V_DYN||(vf<-2&&vt0<REV_MAX+30)){ /* v65: el modelo de baja velocidad se elige con la velocidad TOTAL (antes, con la longitudinal: un coche que iba de lado a 150 km/h se clavaba en seco). Y solo marcha atrás de verdad (lenta): un trompeado que va hacia atrás rápido sigue deslizando. v64: marcha atrás siempre con el modelo cinemático (con el dinámico derrapaba de lado y era caótico) */
     // baja velocidad: modelo cinemático
     const rt=vf*Math.tan(del)/LWB;c.r+=(rt-c.r)*Math.min(1,12*dt);vl*=Math.exp(-10*dt);
     vf+=ax*dt;
@@ -953,7 +970,11 @@ function physicsSim(R,c,dt){
        Con teclado (todo o nada) el volante a fondo las llevaba a ~18°: marcas, humo y calor al girar después de frenar. */
     const bF=Math.atan2(vl+LA*c.r,v),dE=pl&&paved(c.surf)?clamp(del,bF-(AID?2.4:3.0)/CSf,bF+(AID?2.4:3.0)/CSf):del;
     const af=bF-dE,ar=Math.atan2(vl-LB*c.r,v);
-    const Ff=-latF*Math.tanh(CSf*af),Fr=-latR*Math.tanh(CS*ar);
+    /* v65 (solo jugador): con agua la goma tiene un pico más marcado: pasado el límite agarra menos (desliza más y cuesta más recogerlo) */
+    const wdF=wvP>0?1-WSLIDE*wvP*clamp((Math.abs(af)-0.08)/0.14,0,1):1,wdR=wvP>0?1-WSLIDE*wvP*clamp((Math.abs(ar)-0.08)/0.14,0,1):1;
+    /* v65: deslizando muy cruzado (trompo, coche que se va de lado) la goma arrastra: agarre de deslizamiento menor que el máximo, y menos con agua: el coche sigue resbalando por el asfalto en vez de pararse en seco */
+    const wS=clamp((c.wet||0)*1.6,0,1),skK=a=>1-(SLK+SLKW*wS)*clamp((Math.abs(a)-0.3)/0.5,0,1);
+    const Ff=-latF*wdF*skK(af)*Math.tanh(CSf*af),Fr=-latR*wdR*skK(ar)*Math.tanh(CS*ar);
     let dr=(LA*Ff*Math.cos(dE)-LB*Fr)/IZ;
     // v44: para el jugador, el giro de referencia se limita a lo que permite el agarre (si no, con mucho volante la ayuda empujaba a trompear)
     const rCap=mu*1.12/Math.max(v,V_DYN),rKin=vf*Math.tan(del)/LWB,rGrip=paved(c.surf)?clamp(rKin,-rCap,rCap):rKin;
@@ -972,7 +993,7 @@ function physicsSim(R,c,dt){
   }
   if(braking&&vf<0&&c.vx*fx+c.vy*fy>0)vf=0;
   if(revStop&&vf>0)vf=0;
-  if(vf<-REV_MAX)vf=-REV_MAX;
+  if(vf<-REV_MAX&&vt0<REV_MAX+30)vf=-REV_MAX;
   c.vx=fx*vf-fy*vl;c.vy=fy*vf+fx*vl;
   c.a+=c.r*dt;c.yaw=c.r;
   c.x+=c.vx*dt;c.y+=c.vy*dt;
@@ -1029,7 +1050,7 @@ function collidePair(R,a,b){
   if(vn>=0)return;
   const ran=rax*n[1]-ray*n[0],rbn=rbx*n[1]-rby*n[0];
   const IE=200*2.6;
-  const j=-(1+0.05)*vn/(ia+ib+ran*ran*ia/IE+rbn*rbn*ib/IE);
+  const j=-(1+0.05+HITE*clamp((-vn-60)/200,0,1))*vn/(ia+ib+ran*ran*ia/IE+rbn*rbn*ib/IE); /* v65: los golpes fuertes rebotan algo (antes casi plásticos: los coches se quedaban pegados) */
   /* v62: golpes con más inercia: el giro que transmite el golpe ya no se recorta tanto (antes un toque a <30 km/h casi no giraba
      y el máximo era 0,6 rad/s), y hay rozamiento en el contacto (ruedas que se tocan se enganchan y el coche tocado gira) */
   const yk=clamp((-vn-HITYK0)/90,0.3,1),ym=HITYM0+3.2*clamp((-vn-40)/170,0,1);
@@ -1468,7 +1489,7 @@ function stepRace(R,dt){
   if(R.standings)blueFlags(R,dt);
   evoStep(R,dt);stewardsStep(R);
   R.toT=(R.toT||0)+dt;if(R.toT>0.5){R.toT=0;teamOrders(R);}
-  stepDebris(R,dt);
+  stepDebris(R,dt);pitClosure(R);
   for(const c of cars)if(c.cleared&&!c.gone&&R.t>c.clearAt){c.gone=true;c.x=-1e5;c.y=-1e5;c.vx=c.vy=0;}
   // banderas amarillas: coche parado, trompeado o fuera de pista → zona de precaución
   if(R.phase==='race'){R.yellow.length=0;for(const c of cars){if(c.pit||c.finished)continue;const v=Math.hypot(c.vx,c.vy);
@@ -1556,11 +1577,13 @@ function stepRace(R,dt){
     /* v53: última llamada del muro antes de la entrada a boxes, con el radar de ahora (antes se decidía una vuelta antes, en meta) */
     if(R.mode==='race'&&c.bot&&!c.pit&&!c.finished&&!c.dnf&&R.weather&&R.weather.type!=='dry'&&c.wxCallLap!==c.lap&&lapsLeft(R,c)>=2&&c.lap>=2){const d=dOf(tr,c.idx);if(d>=-(PITL+330)&&d<=-(PITL+130)){c.wxCallLap=c.lap;wxStrategy(R,c);}}
     if(R.mode==='race'&&c.bot&&c.pitReq&&!c.pit&&c.lap>=R.laps)c.pitReq=false; /* v64: en la última vuelta no se para nunca (la meta está justo después de la entrada) */
-    if((R.mode==='race'||R.liveQ)&&c.pitReq&&!c.pit&&!c.finished&&c.bot){const d=dOf(tr,c.idx);if(d>=-(PITL+100)&&d<=-(PITL+62)){c.pit='in';c.qFly=false;}}
+    if((R.mode==='race'||R.liveQ)&&c.pitReq&&!c.pit&&!c.finished&&c.bot&&!R.pitClosed){const d=dOf(tr,c.idx);if(d>=-(PITL+100)&&d<=-(PITL+62)){c.pit='in';c.qFly=false;}}
     /* v49: el jugador entra a boxes conduciendo: al meterse en el carril del pit lane pasa a «en boxes» (aunque no hubiera pedido BOX) */
-    if((R.mode==='race'||R.liveQ)&&!c.bot&&!c.pit&&!c.finished&&!c.dnf){const d=dOf(tr,c.idx);if(d>=-(PITL+PITE)&&d<-PITL+8&&c.lat*tr.pitSide>W+12&&onPitLane(tr,c)){c.pit='in';c.qFly=false;if(!c.pitReq){c.pitReq=true;if(R.fx)R.events.push({type:'pitenter',car:c});}}
+    if((R.mode==='race'||R.liveQ)&&!c.bot&&!c.pit&&!c.finished&&!c.dnf){const d=dOf(tr,c.idx);if(d>=-(PITL+PITE)&&d<-PITL+8&&c.lat*tr.pitSide>W+12&&onPitLane(tr,c)){c.pit='in';c.qFly=false;if(!c.pitReq){c.pitReq=true;if(R.fx)R.events.push({type:'pitenter',car:c});}
+        if(R.pitClosed&&R.mode==='race'&&!R.liveQ){c.pen+=10;if(R.fx)R.events.push({type:'pit_closed_pen',car:c});}}
+      else if(R.pitClosed&&c.pitReq&&d>=-(PITL+400)&&d<-(PITL+PITE)&&!c.pcWarn){c.pcWarn=true;if(R.fx)R.events.push({type:'pit_closed_warn',car:c});}
       else if(c.pitReq&&d>=-PITL+8&&d<0&&!c.pitMiss){c.pitMiss=true;if(R.fx)R.events.push({type:'pitmiss',car:c});}
-      if(d>0)c.pitMiss=false;}
+      if(d>0){c.pitMiss=false;c.pcWarn=false;}}
     engineStep(R,c,dt);
     if(c.failAt!=null&&!c.engineDead&&!c.finished&&R.t>c.failAt&&c.isPlayer&&!c.bot){c.failAt=null; // al jugador se le avisa: puede salvarla
       c.issue=c.failType==='brakes'?'brakes':'oil';if(R.fx)R.events.push({type:'radioIssue',car:c,kind:c.issue});}

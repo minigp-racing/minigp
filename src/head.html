@@ -369,6 +369,36 @@ details.fold>summary{padding:16px 2px;font-size:14px}
 .mico{width:46px;height:46px}.mico svg{width:22px;height:22px}
 .touch .seg button,.touch .btn2{min-height:48px;font-size:16px}.touch .go{min-height:54px}
 .land .stp{padding:8px 2px}.land .stp .ctl button{width:42px;height:42px}
+/* v65: la pausa no se desplaza a los lados (en el móvil el dedo la movía) y las opciones van aparte */
+#pause{overflow-x:hidden;touch-action:pan-y}#pause .card{max-width:min(560px,100vw - 16px);box-sizing:border-box;overflow-x:hidden;touch-action:pan-y}
+#pause .card *{max-width:100%;box-sizing:border-box}#pause table{table-layout:fixed;width:100%}#pause td,#pause th{overflow:hidden;text-overflow:ellipsis}
+#pause input[type=range]{touch-action:none}
+#pauseOpts .steerAdj .sl{flex-wrap:wrap}#pauseOpts .steerAdj .sl span:first-child{width:100%}
+/* v65: panel de información (estado del coche ampliado / clasificación completa) que pausa el juego */
+#board{pointer-events:auto;cursor:pointer}
+#infoPanel{position:fixed;inset:0;z-index:60;display:flex;justify-content:center;align-items:flex-start;overflow:hidden;touch-action:pan-y}
+#infoPanel.hidden{display:none}
+#infoPanel .ip{background:rgba(10,12,16,.94);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px 14px;width:min(560px,94vw);box-sizing:border-box;max-height:92vh;overflow-y:auto;overflow-x:hidden;margin-top:4vh;color:#e8ecf2;font:13px system-ui,sans-serif;font-variant-numeric:tabular-nums}
+#infoPanel.stat .ip{margin-top:var(--sth,36vh);max-height:calc(96vh - var(--sth,36vh))}
+#infoPanel.stat.land{justify-content:flex-end}#infoPanel.stat.land .ip{margin:3vh 3vw 0 0;width:50vw;max-height:94vh}
+#infoPanel h3{margin:0 0 6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9aa4b2;font-weight:700}
+#infoPanel .sec{margin:0 0 10px}#infoPanel .kv{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+#infoPanel .kv b{font-weight:700;text-align:right}#infoPanel .ok{color:#3ddc84}#infoPanel .wa{color:#ffb300}#infoPanel .ko{color:#ff5a4f}
+#infoPanel .whl{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}#infoPanel .whl div{background:rgba(255,255,255,.05);border-radius:6px;padding:4px 6px;display:flex;justify-content:space-between;gap:6px}
+#infoPanel table{width:100%;border-collapse:collapse;table-layout:fixed}#infoPanel td{padding:3px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-bottom:1px solid rgba(255,255,255,.06)}
+#infoPanel td.r{text-align:right}#infoPanel tr.me td{background:rgba(31,111,255,.35);font-weight:800}#infoPanel tr.out td{opacity:.45}#infoPanel tr.hd td{color:#9aa4b2;font-size:10.5px;text-transform:uppercase}
+#infoPanel .foot{text-align:center;color:#9aa4b2;font-size:12px;margin-top:6px}
+/* v65: móvil apaisado: la radio del ingeniero a la derecha, debajo del minimapa (en el centro tapaba la pista por delante junto a los avisos) */
+body.compact.land #radio{top:calc(14px + 110px*var(--u));right:6px;left:auto;bottom:auto;transform:translateX(6px);max-width:30vw}
+body.compact.land #radio.on{transform:none}
+/* v65: HUD del PC: tiempos, radar y avisos en la columna de la derecha; esferas abajo a la derecha */
+body:not(.compact) #times{width:310px;box-sizing:border-box}
+body:not(.compact) #car{bottom:auto;top:200px}
+#pauseKeys{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 10px;font-size:12px;opacity:.75;margin-top:12px}
+#pauseKeys.hidden{display:none}#pauseKeys kbd{background:#1b2a4d;border:1px solid #33415f;border-radius:4px;padding:0 4px;font:700 10px ui-monospace,Menlo,monospace}
+/* v65: versión del juego abajo a la derecha del menú principal */
+#verTag{position:fixed;right:12px;bottom:10px;font:600 12px ui-monospace,Menlo,monospace;color:rgba(255,255,255,.45);letter-spacing:.05em;pointer-events:none;z-index:5}
+#menu.hidden #verTag{display:none}
 </style>
 </head>
 <body>
@@ -409,6 +439,7 @@ details.fold>summary{padding:16px 2px;font-size:14px}
 <div class="tb sm" data-k="pause" style="left:16px;bottom:104px">II</div>
 
 <div id="menu" class="overlay home">
+  <div id="verTag">v65</div>
   <div class="card">
     <div class="mtop"><div class="brand"><div class="flag"></div><h1>MINI <span>GP</span></h1></div>
       <div class="micons"><button class="mico" id="bSettings" title="Ajustes" aria-label="Ajustes"></button><button class="mico" id="bFull" title="Pantalla completa" aria-label="Pantalla completa"></button><button class="mico" id="bHelp" title="Cómo se juega" aria-label="Cómo se juega"></button></div></div>
@@ -444,14 +475,22 @@ details.fold>summary{padding:16px 2px;font-size:14px}
 
 <div id="pause" class="overlay hidden">
   <div class="card">
+    <div id="pauseMain">
     <h2>Pausa</h2>
     <div id="stratPause"></div>
-    <div class="steerAdj" id="steerAdjPause"></div>
     <button class="go" id="resume">Continuar</button>
-    <div class="row2"><button class="btn2" id="restart1">Reiniciar sesión</button><button class="btn2" id="replay1">Repetición (T)</button><button class="btn2" id="endq">Terminar clasificación</button><button class="btn2" id="tomenu1">Menú</button></div>
+    <div class="row2"><button class="btn2" id="pOpts">⚙ Opciones</button><button class="btn2" id="restart1">Reiniciar sesión</button><button class="btn2" id="replay1">Repetición (T)</button><button class="btn2" id="endq">Terminar clasificación</button><button class="btn2" id="tomenu1">Menú</button></div>
+    <div id="pauseKeys" class="keys"><span><kbd>B</kbd> boxes</span><span><kbd>1</kbd>-<kbd>5</kbd> neumático</span><span><kbd>E</kbd> KERS</span><span><kbd>F</kbd> DRS</span><span><kbd>Q</kbd> motor</span><span><kbd>C</kbd> cámara</span><span><kbd>T</kbd> repetición</span><span><kbd>M</kbd> sonido</span><span><kbd>P</kbd> pausa</span></div>
+    </div>
+    <div id="pauseOpts" class="hidden">
+      <h2>Opciones</h2>
+      <div class="steerAdj" id="steerAdjPause"></div>
+      <button class="go" id="pOptsBack">Volver a la pausa</button>
+    </div>
   </div>
 </div>
 
+<div id="infoPanel" class="hidden"></div>
 <div id="pitmenu" class="overlay hidden"><div class="card pitcard"><div id="pitBody"></div></div></div>
 <div id="welcome" class="overlay page hidden"><div class="card"><div id="welBody"></div></div></div>
 <div id="prerace" class="overlay page hidden"><div class="card"><div id="preBody"></div></div></div>
