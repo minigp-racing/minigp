@@ -651,7 +651,7 @@ function stepHtml(label,store,key,opts){const cur=String(STORES[store][key]);con
 document.addEventListener('click',e=>{const b=e.target.closest('.stp .ctl button');if(!b)return;const w=b.closest('.stp'),store=STORES[w.dataset.store],k=w.dataset.set,opts=JSON.parse(w.dataset.opts);
   let i=opts.findIndex(o=>String(o[0])===String(store[k]));i=((i<0?0:i)+(+b.dataset.d)+opts.length)%opts.length;store[k]=NUMKEYS.includes(k)?parseInt(opts[i][0],10):opts[i][0];w.querySelector('.val').textContent=opts[i][1];
   if(w.dataset.store==='settings')saveSettings();if((k==='track'||k==='laps')&&!$('quick').classList.contains('hidden'))openQuick();});
-const NUMKEYS=['tvcam','realtex','reallook','qlive','qlen','radioLvl','track','laps','quali','mult','cars','damage','aids','incidents','weekend','autoRep','formation','scOn','radio','voice','snd','ghost','vib','drsAuto','cornerHint','qfmt','adaptOn','carStyle','perf'];
+const NUMKEYS=['tvcam','realtex','reallook','qlive','qlen','radioLvl','track','laps','quali','mult','cars','damage','aids','incidents','weekend','autoRep','formation','scOn','radio','voice','snd','ghost','vib','drsAuto','cornerHint','qfmt','adaptOn','carStyle','perf','real3d'];
 document.addEventListener('click',e=>{
   const b=e.target.closest('.seg button');if(!b)return;
   const seg=b.parentElement,store=STORES[seg.dataset.store],k=seg.dataset.set,v=b.dataset.v;
@@ -740,7 +740,7 @@ function voiceSelect(){const vs=esVoices(),best=pickVoice();if(!vs.length)return
 function openSettings(){
   $('steerSeg').innerHTML=segHtml('settings','steer',OPT.steer);$('steerAdjMenu').innerHTML=steerAdjHtml();$('engSnd').innerHTML=engSoundHtml();
   $('sndOpts').innerHTML=`<span class="fl">Ingeniero por radio</span>${segHtml('settings','voice',OPT.voice)}<span class="fl">Cuánto habla</span>${segHtml('settings','radioLvl',[[0,'Solo lo importante'],[1,'Normal']])}<span class="fl">Voz del ingeniero</span>${voiceSelect()}<span class="fl">Sonido general</span>${segHtml('settings','snd',[[1,'Activado'],[0,'Silencio']])}<span class="fl">Vibración (móvil)</span>${segHtml('settings','vib',[[1,'Sí'],[0,'No']])}`;
-  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Repeticiones</span>${segHtml('settings','tvcam',[[1,'Cámaras de TV'],[0,'Detrás del coche']])}<span class="fl">Medidor de rendimiento (fps y tirones)</span>${segHtml('settings','perf',[[0,'No'],[1,'Sí']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
+  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Repeticiones</span>${segHtml('settings','tvcam',[[1,'Cámaras de TV'],[0,'Detrás del coche']])}<span class="fl">Circuito en 3D (Monza; necesita internet)</span>${segHtml('settings','real3d',[[1,'Sí'],[0,'No']])}<span class="fl">Medidor de rendimiento (fps y tirones)</span>${segHtml('settings','perf',[[0,'No'],[1,'Sí']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
   $('engPick').onclick=engWavPick;if($('engDel'))$('engDel').onclick=()=>{try{localStorage.removeItem(ENGWAV_KEY);}catch(e){}settings.engMode='synth';saveSettings();engSampleStop();openSettings();};
   if($('voiceSel')){$('voiceSel').onchange=e=>{settings.voiceName=e.target.value;saveSettings();};$('voiceTry').onclick=()=>{try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance('Box, box. Ponemos medios y salimos por delante de Ortega.');u.lang='es-ES';u.rate=1.06;const v=pickVoice();if(v)u.voice=v;speechSynthesis.speak(u);}catch(e){}};}
   setTab(ui.setTab||'drive');showOnly('settings');}
@@ -2432,7 +2432,7 @@ function drawEnv(g,tr,bx0,by0,bx1,by1){
     for(const row of [-p.h/2+40,-p.h/2+120,p.h/2-120,p.h/2-40]){for(let x=-p.w/2+10;x<p.w/2-10;x+=16){g.beginPath();g.moveTo(x,row-22);g.lineTo(x,row+22);g.stroke();
       if(Rq()<0.72){const c=cols[Math.floor(Rq()*cols.length)];g.fillStyle='rgba(0,0,0,.3)';g.fillRect(x+3,row-17,11,34);g.fillStyle=c;g.fillRect(x+2,row-19,11,32);g.fillStyle='rgba(20,30,40,.55)';g.fillRect(x+3,row-10,9,9);}}}
     g.restore();}
-  for(const b of E.bld){if(!vis(b.x,b.y,Math.hypot(b.w,b.h)))continue;g.save();g.translate(b.x,b.y);g.rotate(b.a);
+  for(const b of (B3.skip?[]:E.bld)){if(!vis(b.x,b.y,Math.hypot(b.w,b.h)))continue;g.save();g.translate(b.x,b.y);g.rotate(b.a);
     if(RLf){const SV=sunVec(),ca=Math.cos(b.a),sa=Math.sin(b.a),ox=SV.x*7,oy=SV.y*7;fsh(g,ox*ca+oy*sa,-ox*sa+oy*ca,.55,10,(ex,col)=>{g.fillStyle=col;g.fillRect(-b.w/2-ex/2,-b.h/2-ex/2,b.w+ex,b.h+ex);});}else{g.fillStyle='rgba(0,0,0,.28)';g.fillRect(-b.w/2+10,-b.h/2+12,b.w,b.h);}
     const c=ROOF_COL[b.c];g.fillStyle=c;g.fillRect(-b.w/2,-b.h/2,b.w,b.h);if(b.ind&&settings.realtex!==0&&PATR.roof){g.globalAlpha=0.55;g.fillStyle=PATR.roof;g.fillRect(-b.w/2,-b.h/2,b.w,b.h);g.globalAlpha=1;} /* v57: naves con chapa real */
     if(b.ind){g.strokeStyle='rgba(0,0,0,.12)';g.lineWidth=2;for(let x=-b.w/2+12;x<b.w/2;x+=14){g.beginPath();g.moveTo(x,-b.h/2);g.lineTo(x,b.h/2);g.stroke();}}
@@ -2604,7 +2604,7 @@ function drawVignette(){if(!VIG||VIG.w!==VW||VIG.h!==VH){const r=Math.hypot(VW,V
 /* v55: decoración fija (va a las baldosas cacheadas) */
 function drawDecoStatic(ctx,G,tr,bx0,by0,bx1,by1){const D=decoFor(tr),SV=sunVec(),vis=(x,y,r)=>x+r>bx0&&x-r<bx1&&y+r>by0&&y-r<by1;
   const teamsOn={};if(R)for(const c of R.cars)teamsOn[c.team]=c;
-  if(realOf(tr))drawForest(ctx,tr,bx0,by0,bx1,by1);
+  if(realOf(tr)&&!B3.skip)drawForest(ctx,tr,bx0,by0,bx1,by1);
   /* v60: bosques (en las baldosas: no cuestan nada al dibujar cada fotograma) */
   {const th=themeOf(tr);if(D.wpatch)for(const p of D.wpatch){if(!vis(p.x,p.y,p.r+40))continue;const g=ctx.createRadialGradient(p.x,p.y,p.r*0.5,p.x,p.y,p.r+30);g.addColorStop(0,'rgba(24,52,22,.85)');g.addColorStop(1,'rgba(24,52,22,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,p.r+30,0,6.283);ctx.fill();}
     if(D.woods&&D.woods.length){const SVa=SV.a*0.5;for(const t of D.woods){if(!vis(t.x,t.y,40))continue;const kd=treeKind(Object.assign({},th,{dens:1}),t)||'dec',d=t.r*(kd==='pine'?2.9:kd==='palm'?2.4:kd==='con'?2.3:2.6);
@@ -2674,14 +2674,78 @@ function drawDecoDyn(Rv){if(!R||(R.tr.photo&&USE_PHOTO))return;const tr=R.tr,D=d
 let TS=1.5,TMAX=256;const TILE=256,TILES=new Map();let tileOwner=null,tileFree=[];
 /* v66: medidor de rendimiento (Ajustes → Imagen): qué se ha preparado en cada fotograma */
 const PERF={f:{tiles:0,tileMs:0,spr:0,sprMs:0,sim:0,ren:0},hist:[],spikes:0,worst:null,t0:0,fps:60,lastDt:0.016};
+/* ---------- v69: circuito en 3D horneado ----------
+   Cada baldosa: (1) el suelo se dibuja en 2D como siempre pero sin árboles ni edificios; (2) esa imagen es la textura (y el relieve) de un plano en una escena 3D
+   con árboles y edificios de verdad, sol con sombras y luz de cielo; (3) se fotografía desde arriba y eso es la baldosa. Sin three.js (sin internet) queda el 2D. */
+const B3={st:0,skip:false};
+function b3On(tr){const want=settings.real3d!==0;if(B3.want!==want){if(B3.want!=null)clearTiles();B3.want=want;} /* al cambiar la opción se rehacen las baldosas */
+  if(!tr||!realOf(tr)||!want)return false;if(C3.st!==2){if(!C3.st)c3Load();return false;}if(!B3.st)b3Init();if(B3.st!==2)return false;if(B3.tr!==tr)b3Track(tr);return true;}
+function b3Init(){B3.st=1;try{const T=C3.T;B3.T=T;
+  const rd=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true,alpha:false});rd.shadowMap.enabled=true;rd.shadowMap.type=T.PCFSoftShadowMap;rd.outputColorSpace=T.SRGBColorSpace;
+  const sc=new T.Scene(),cam=new T.OrthographicCamera(-1,1,1,-1,1,6000);cam.up.set(0,0,-1);
+  const hemi=new T.HemisphereLight(0xdfe9ff,0x4a4632,0.62),sun=new T.DirectionalLight(0xfff2dc,1.0);sun.castShadow=true;sun.shadow.mapSize.set(1536,1536);sun.shadow.bias=-0.0004;sun.shadow.normalBias=0.8;sun.shadow.radius=3;
+  sc.add(hemi,sun,sun.target);
+  const gtex=new T.CanvasTexture(document.createElement('canvas'));gtex.colorSpace=T.SRGBColorSpace;gtex.generateMipmaps=false;gtex.minFilter=gtex.magFilter=T.LinearFilter;
+  const gmat=new T.MeshStandardMaterial({map:gtex,bumpMap:gtex,bumpScale:1.6,roughness:0.95,metalness:0});
+  const ground=new T.Mesh(new T.PlaneGeometry(1,1),gmat);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;sc.add(ground);
+  /* copa de árbol: 5 esferas abultadas e irregulares (normales de esfera para que la luz sea suave) */
+  const R=rng(9001),parts=[];const lobes=[[0,0.05,0,0.78],[0.46,-0.05,0.1,0.55],[-0.42,0,0.22,0.56],[0.1,0.02,-0.48,0.55],[-0.2,0.22,-0.15,0.5],[0.25,0.25,0.3,0.45]];
+  for(const [lx,ly,lz,lr] of lobes){const g=new T.IcosahedronGeometry(lr,1);const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),k=1+0.13*Math.sin(x*9+R()*0.2)*Math.sin(y*11)*Math.sin(z*8)+0.06*(R()-0.5);p.setXYZ(i,lx+x*k,ly+y*k*0.85,lz+z*k);}parts.push(g);}
+  const crown=b3Merge(T,parts);
+  const cone=b3Merge(T,[new T.ConeGeometry(0.62,1.5,8).translate(0,-0.35,0),new T.ConeGeometry(0.48,1.2,8).translate(0,0.35,0),new T.ConeGeometry(0.3,0.9,8).translate(0,0.85,0)]);
+  const umb=b3Merge(T,[0,1,2,3].map(k=>new T.IcosahedronGeometry(0.62,1).scale(1,0.42,1).translate(Math.cos(k*1.7)*0.42,0.04*k,Math.sin(k*1.7)*0.42)));
+  const leaf=new T.MeshStandardMaterial({roughness:0.92,metalness:0});
+  const mk=(geo,n)=>{const m=new T.InstancedMesh(geo,leaf,n);m.castShadow=true;m.receiveShadow=true;m.count=0;m.frustumCulled=false;sc.add(m);return m;};
+  Object.assign(B3,{rd,sc,cam,hemi,sun,gtex:null,gmat,ground,trees:{dec:mk(crown,4000),con:mk(cone,1500),pine:mk(umb,1500)},bld:[],st:2});
+  clearTiles();}catch(e){console.warn('3D horneado no disponible:',e);B3.st=-1;}}
+function b3Merge(T,list){let n=0;for(const g of list){const q=g.index?g.toNonIndexed():g;n+=q.attributes.position.count;}const pos=new Float32Array(n*3),nor=new Float32Array(n*3);let o=0;
+  for(const g0 of list){const g=g0.index?g0.toNonIndexed():g0;if(!g.attributes.normal)g.computeVertexNormals();pos.set(g.attributes.position.array,o);nor.set(g.attributes.normal.array,o);o+=g.attributes.position.array.length;}
+  const G=new T.BufferGeometry();G.setAttribute('position',new T.BufferAttribute(pos,3));G.setAttribute('normal',new T.BufferAttribute(nor,3));return G;}
+/* edificios del circuito (una vez por circuito): naves de cubierta plana y casas con tejado a dos aguas */
+function b3Track(tr){const T=B3.T;for(const m of B3.bld){B3.sc.remove(m);m.geometry.dispose();}B3.bld=[];B3.tr=tr;
+  const E=tr.env||{bld:[]},wall=new T.MeshStandardMaterial({color:0xd9d2c4,roughness:0.9}),mats={};
+  for(const b of E.bld){const col=ROOF_COL[b.c]||'#888888';const rm=mats[col]||(mats[col]=new T.MeshStandardMaterial({color:new T.Color(col),roughness:b.ind?0.6:0.85,metalness:b.ind?0.25:0}));
+    const grp=new T.Group();const H=b.ind?62:36;
+    const body=new T.Mesh(new T.BoxGeometry(b.w,H,b.h),b.ind?rm:wall);body.position.y=H/2;body.castShadow=body.receiveShadow=true;grp.add(body);
+    if(!b.ind){const rh=Math.min(b.w,b.h)*0.32,L=Math.max(b.w,b.h),Wd=Math.min(b.w,b.h),along=b.w>=b.h;
+      const sh=new T.Shape();sh.moveTo(-Wd/2-3,0);sh.lineTo(Wd/2+3,0);sh.lineTo(0,rh);sh.closePath();const g=new T.ExtrudeGeometry(sh,{depth:L+6,bevelEnabled:false});g.translate(0,0,-(L+6)/2);
+      const roof=new T.Mesh(g,rm);roof.position.y=H;if(along)roof.rotation.y=Math.PI/2;roof.castShadow=roof.receiveShadow=true;grp.add(roof);}
+    grp.position.set(b.x,0,b.y);grp.rotation.y=-b.a;B3.sc.add(grp);B3.bld.push(grp);}
+  B3.trCache=null;}
+/* sol según la hora: la sombra cae hacia sunVec(); altura del sol más baja al atardecer */
+function b3Sun(cx,cz){const SV=sunVec(),t=settings.tod||'day',el=(t==='sunset'?15:t==='dusk'?22:t==='night'?55:42)*Math.PI/180,L=Math.hypot(SV.x,SV.y)||1,ux=SV.x/L,uy=SV.y/L,D=3000;
+  B3.sun.position.set(cx-ux*Math.cos(el)*D,Math.sin(el)*D,cz-uy*Math.cos(el)*D);B3.sun.target.position.set(cx,0,cz);B3.sun.target.updateMatrixWorld();
+  B3.sun.intensity=t==='night'?0.3:t==='sunset'?1.25:1.05;B3.sun.color.set(t==='sunset'?0xffd2a0:0xfff2dc);B3.hemi.intensity=t==='night'?0.45:0.85;}
+const B3M=300; /* margen: árboles y edificios de fuera de la baldosa que dan sombra dentro */
+function b3Bake(G,tr,tx,ty,c){const T=B3.T,x0=tx*TILE,y0=ty*TILE,cx=x0+TILE/2,cz=y0+TILE/2,W=c.width;
+  /* la textura de WebGL2 tiene tamaño fijo: se rehace si cambia el tamaño de la baldosa */
+  if(!B3.gtex||B3.gtW!==W){if(B3.gtex)B3.gtex.dispose();const tx2=new T.CanvasTexture(c);tx2.colorSpace=T.SRGBColorSpace;tx2.generateMipmaps=false;tx2.minFilter=tx2.magFilter=T.LinearFilter;B3.gtex=tx2;B3.gtW=W;B3.gmat.map=B3.gmat.bumpMap=tx2;B3.gmat.needsUpdate=true;}
+  B3.gtex.image=c;B3.gtex.needsUpdate=true;B3.ground.position.set(cx,0,cz);B3.ground.scale.set(TILE,TILE,1);
+  /* árboles de la zona: bosque + árboles sueltos (con su especie) */
+  const th=themeOf(tr),M=new T.Matrix4(),Q=new T.Quaternion(),P=new T.Vector3(),S=new T.Vector3(),C=new T.Color(),UP=new T.Vector3(0,1,0),n={dec:0,con:0,pine:0};
+  const put=(kind,x,y,r,s,h)=>{const m=B3.trees[kind];if(n[kind]>=m.instanceMatrix.count)return;const hh=(h||1)*(kind==='con'?r*2.6:kind==='pine'?r*2.9:r*2.2+20);
+    P.set(x,hh,y);Q.setFromAxisAngle(UP,s*40);const k=kind==='con'?r*0.95:kind==='pine'?r*1.35:r*1.18;S.set(k,kind==='con'?k*1.25:k,k);M.compose(P,Q,S);m.setMatrixAt(n[kind],M);
+    if(kind==='dec')C.setHSL(0.2+((s*7.3)%1)*0.09,0.32+((s*3.1)%1)*0.2,0.17+((s*5.7)%1)*0.1);else if(kind==='con')C.setHSL(0.33+((s*3.7)%1)*0.05,0.3,0.13+((s*2.3)%1)*0.06);else C.setHSL(0.23,0.3,0.2+((s*4.1)%1)*0.06);
+    m.setColorAt(n[kind],C);n[kind]++;};
+  const F=forestFor(tr),bx0=x0-B3M,by0=y0-B3M,bx1=x0+TILE+B3M,by1=y0+TILE+B3M;
+  for(let yy=Math.floor(by0/TILE);yy<=Math.floor(by1/TILE);yy++)for(let xx=Math.floor(bx0/TILE);xx<=Math.floor(bx1/TILE);xx++){const a=F.bk.get(xx+','+yy);if(a)for(const t of a)if(t.x>bx0&&t.x<bx1&&t.y>by0&&t.y<by1)put('dec',t.x,t.y,t.r,(t.v+1)*0.137+t.x*0.0001,1);}
+  for(const t of tr.trees){if(t.x<bx0||t.x>bx1||t.y<by0||t.y>by1)continue;const kd=treeKind(th,t);if(!kd)continue;put(kd==='palm'?'pine':kd,t.x,t.y,t.r*1.1,t.s,1.15);
+    if(th&&th.dens>1&&((t.s*31.7)%1)<th.dens-1)put(kd==='palm'?'pine':kd,t.x+28*Math.cos(t.s*40),t.y+28*Math.sin(t.s*40),t.r*0.95,(t.s*3.3)%1,1.1);}
+  for(const k in B3.trees){const m=B3.trees[k];m.count=n[k];m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
+  b3Sun(cx,cz);const SC=B3.sun.shadow.camera,E=(TILE/2+B3M)*1.15;SC.left=SC.bottom=-E;SC.right=SC.top=E;SC.near=10;SC.far=6500;SC.updateProjectionMatrix();
+  const cam=B3.cam;cam.left=-TILE/2;cam.right=TILE/2;cam.top=TILE/2;cam.bottom=-TILE/2;cam.position.set(cx,3000,cz);cam.lookAt(cx,0,cz);cam.updateProjectionMatrix();
+  if(B3.rd.domElement.width!==W)B3.rd.setSize(W,W,false);B3.rd.render(B3.sc,cam);
+  const g=c.getContext('2d');g.save();g.setTransform(1,0,0,1,0,0);g.drawImage(B3.rd.domElement,0,0);g.restore();}
 function tileGet(G,tr,tx,ty,force){
   const key=tx+','+ty;let t=TILES.get(key);
   if(t){t.used=performance.now();return t.c;}
   if(!force)return null;
   const tP0=performance.now();const c=tileFree.pop()||document.createElement('canvas');c.width=c.height=TILE*TS;const g=c.getContext('2d');
   g.setTransform(TS,0,0,TS,0,0);g.translate(-tx*TILE,-ty*TILE);
-  drawStatic(g,G,tr,tx*TILE-2,ty*TILE-2,(tx+1)*TILE+2,(ty+1)*TILE+2);
-  drawBoards(g,G,tr,tx*TILE-60,ty*TILE-60,(tx+1)*TILE+60,(ty+1)*TILE+60);
+  const b3=b3On(tr);B3.skip=b3;
+  try{drawStatic(g,G,tr,tx*TILE-2,ty*TILE-2,(tx+1)*TILE+2,(ty+1)*TILE+2);
+  drawBoards(g,G,tr,tx*TILE-60,ty*TILE-60,(tx+1)*TILE+60,(ty+1)*TILE+60);}finally{B3.skip=false;}
+  if(b3)try{b3Bake(G,tr,tx,ty,c);}catch(e){console.warn('3D horneado:',e);B3.st=-1;}
   TILES.set(key,{c,used:performance.now()});PERF.f.tiles++;PERF.f.tileMs+=performance.now()-tP0;
   if(TILES.size>TMAX){let ok=null,ou=1e18;for(const [k,v] of TILES)if(v.used<ou){ou=v.used;ok=k;}const v=TILES.get(ok);TILES.delete(ok);tileFree.push(v.c);}
   return c;
@@ -2858,7 +2922,7 @@ function render(dt){
   ctx.globalCompositeOperation='source-over';
   ctx.globalAlpha=1;
   const RLT=realOf(tr),SPC=RLT?canopySpr():null,SVT=sunVec();
-  for(const t of tr.trees){if(Math.abs(t.x-cam.x)>Rv||Math.abs(t.y-cam.y)>Rv)continue;
+  for(const t of (B3.st===2&&B3.tr===tr&&realOf(tr)&&settings.real3d!==0?[]:tr.trees)){if(Math.abs(t.x-cam.x)>Rv||Math.abs(t.y-cam.y)>Rv)continue; /* v69: con el 3D horneado los árboles van en las baldosas */
     const th=themeOf(tr),kd=treeKind(th,t);if(!kd)continue;
     const T2=(th&&th.dens>1&&((t.s*31.7)%1)<th.dens-1)?[t,{x:t.x+28*Math.cos(t.s*40),y:t.y+28*Math.sin(t.s*40),r:t.r*0.85,s:(t.s*3.3)%1}]:[t]; /* v60: bosques más densos */
     if(RLT){for(const q of T2){const k=q.r*0.55,d=q.r*2.7;ctx.globalAlpha=Math.min(1,SVT.a*2.9);ctx.drawImage(SOFT,q.x+SVT.x*k-d*0.55,q.y+SVT.y*k-d*0.55,d*1.1,d*1.1);ctx.globalAlpha=1;ctx.drawImage(SPC[Math.floor(q.s*SPC.length)%SPC.length],q.x-d/2,q.y-d/2,d,d);}continue;}
