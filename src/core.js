@@ -277,10 +277,16 @@ function cellPos(Wt,c){return [c.x0+Wt.wx*Wt.t,c.y0+Wt.wy*Wt.t];}
 /* cuánto existe una nube en el instante t (nace en ~70 s y se deshace en ~90 s). El radar (previsión) solo sabe lo que hay ahora */
 function cellLife(Wt,c,t){if(c.born==null&&c.die==null)return 1;const tk=Wt.fc!=null&&c.hid?Wt.fc:t;let f=1;
   if(c.born!=null)f=Math.min(f,clamp((tk-c.born)/70,0,1));if(c.die!=null)f=Math.min(f,clamp(1-(tk-c.die)/90,0,1));return f;}
+/* v68: nubes con forma irregular: el radio cambia con el ángulo (lóbulos) y dentro hay bandas más y menos cargadas. Sale de la posición de la nube (no gasta números aleatorios: el tiempo de cada carrera no cambia) */
+function cellShape(c){if(c.sh)return c.sh;let h=Math.abs(Math.sin(c.x0*12.9898+c.y0*78.233+c.r*0.137)*43758.5453);const R=()=>{h=(h*9301+49297)%233280;return h/233280;};
+  c.sh={a:[0.2+R()*0.12,0.1+R()*0.1,0.06+R()*0.06,0.03+R()*0.04],p:[R()*6.28,R()*6.28,R()*6.28,R()*6.28],k:[2,3,5,8],ca:Math.cos(R()*6.28),sa:Math.sin(R()*6.28),f:0.0016+R()*0.0012};return c.sh;}
+function cellD(c,dx,dy){const S=cellShape(c),th=Math.atan2(dy,dx);let f=1;for(let i=0;i<4;i++)f+=S.a[i]*Math.sin(S.k[i]*th+S.p[i]);
+  const u=(dx*S.ca-dy*S.sa)*S.f,v=(dx*S.sa+dy*S.ca)*S.f,n=0.5+0.25*Math.sin(u+1.7*Math.sin(v*0.8))+0.25*Math.sin(v*1.3+Math.sin(u*0.7)*1.5);
+  return {d:Math.hypot(dx,dy)/(c.r*Math.max(0.45,f)),n};}
 function rainAt(Wt,x,y,zone){
   if(!Wt||Wt.type==='dry')return 0;
   let r=Wt.type==='rain'?(0.42+0.18*Math.sin(Wt.t/38))*(Wt.clearT!=null?clamp(1-((Wt.fc!=null?Wt.fc:Wt.t)-Wt.clearT)/120,0,1):1):0;
-  for(const c of Wt.cells){const lf=cellLife(Wt,c,Wt.t);if(lf<=0)continue;const [px,py]=cellPos(Wt,c),d=Math.hypot(x-px,y-py)/c.r;if(d<1)r+=c.int*lf*smooth(1-d);}
+  for(const c of Wt.cells){const lf=cellLife(Wt,c,Wt.t);if(lf<=0)continue;const [px,py]=cellPos(Wt,c),dx=x-px,dy=y-py;if(dx*dx+dy*dy>c.r*c.r*3.0)continue;const q=cellD(c,dx,dy);if(q.d<1)r+=c.int*lf*smooth(1-q.d)*(0.6+0.55*q.n);}
   return clamp(r*(zone==null?zoneAt(Wt,x,y):zone),0,1.1);
 }
 // agua media prevista en la pista en los instantes indicados (s desde ahora): lo que “ve” el radar del equipo
@@ -297,7 +303,7 @@ function wetNeed(R,c){if(!R.weather||R.weather.type==='dry')return 0;const lap=(
 /* v61: la pista se seca más despacio (antes en ~1 min pasaba de encharcada a casi seca) */
 /* v65: duración de cada sesión de clasificación según la vuelta del circuito (los minutos elegidos valen para una vuelta de 90 s; como mínimo 3,3 vueltas) */
 function qTimeFor(lap,min){return Math.round(Math.max(min*60*Math.max(1,lap/90),3.3*lap));}
-let HITE=0.22,SLICKW=0.45,SLK=0.3,SLKW=0.13,WGRIP=0.08,WLOCK=0.67,WSLIDE=0.15, /* v66: lluvia un tercio menos resbaladiza (antes 0.2, 0.12, 1, 0.22) */ PITCLOSE=35,QGAP=4,HAZ=1,HAZD=70,HAZV=200,HAZA=230,PITHIT=1,WOSCR=0.12,WOAX=0.6,SCDEC=110,SCPASS=4,BOTGK=2, BOTPL=1, /* v62: bots con la física del jugador */ HITYK0=25,HITYM0=1.0,HITMU=0.45,PUNT0=45,PUNTW=150, /* v62: golpes */ DRYK=0.006,CNK0=1,CNKD=0.04,CNKMIN=1, /* v61: aprendizaje por curvas probado y desactivado (CNK0=1): no mejoraba en todos los circuitos */WXGAIN=5,WXK=0.55,UNDERCUT=true,UCLAPS=4,UCCOLD=1.0,REDPOW=640,REDWAIT=3.5;
+let HITE=0.22,SLICKW=0.45,SLK=0.3,SLKW=0.13,WGRIP=0,WLOCK=0.67,WSLIDE=0.08, /* v68: el jugador ya no tiene menos agarre que los bots con agua (antes 0.08) y el pico es la mitad de traicionero (0.15) */ /* v66: lluvia un tercio menos resbaladiza (antes 0.2, 0.12, 1, 0.22) */ PITCLOSE=35,QGAP=4,HAZ=1,HAZD=70,HAZV=200,HAZA=230,PITHIT=1,WOSCR=0.12,WOAX=0.6,SCDEC=110,SCPASS=4,BOTGK=2, BOTPL=1, /* v62: bots con la física del jugador */ HITYK0=25,HITYM0=1.0,HITMU=0.45,PUNT0=45,PUNTW=150, /* v62: golpes */ DRYK=0.006,CNK0=1,CNKD=0.04,CNKMIN=1, /* v61: aprendizaje por curvas probado y desactivado (CNK0=1): no mejoraba en todos los circuitos */WXGAIN=5,WXK=0.55,UNDERCUT=true,UCLAPS=4,UCCOLD=1.0,REDPOW=640,REDWAIT=3.5;
 function wxPlan(R){const Wt=R.weather;if(R.wxP&&Math.abs(R.wxP.t-Wt.t)<4)return R.wxP;
   const lap=(R.est&&R.est.lap)||90,st=10,H=Math.max(200,lap*3.2);let w=R.meanWet||0,tg=w;const a=[w];
   for(let t=st,i=1;t<=H;t+=st,i++){if(i%2===1)tg=forecastWet(R,[t]);w=clamp(w+(tg-w)*(tg>w?0.07:DRYK)*st,0,1);a.push(w);}
@@ -435,7 +441,8 @@ function makeCar(tr,e,idx,lat,compound,fuel,autopilot){
     lap:0,maxLap:0,lapStart:0,lastLap:null,bestLap:null,lapTimes:[],finished:false,finishTime:null,dnf:false,prog:idx,off:false};
 }
 
-function gridSlot(tr,k){const row=Math.floor(k/2),side=k%2;return {idx:(tr.N-Math.round((60+row*80+side*40)/tr.sp))%tr.N,lat:side?-W*0.4:W*0.4};}
+/* v68: parrilla con las medidas reales: 8 m entre puestos (16 m entre filas); antes 12 m entre filas y ~6 m de hueco al de delante: sin espacio para reaccionar */
+function gridSlot(tr,k){const row=Math.floor(k/2),side=k%2;return {idx:(tr.N-Math.round((60+row*104+side*52)/tr.sp))%tr.N,lat:side?-W*0.4:W*0.4};}
 
 function fuelFor(laps,est){return laps*est.fuel*1.06+1.5}
 function chooseCompound(lapsLeft,est,rand){
@@ -625,7 +632,10 @@ function botControl(R,c,dt){
       if(o===c||o.pit)continue;const d=o.prog-c.prog,dead=o.dnf||o.engineDead||o.wrecked||(HAZ&&R.t>6&&!o.finished&&Math.abs(o.lat)<W+KERB+10&&Math.hypot(o.vx,o.vy)<50); /* v64: un coche parado en la pista también es un obstáculo */
       if(underSC)break;
       // adelantar: los agresivos buscan hueco antes
-      if(d>0&&d<(dead?(HAZ?HAZD:22):8+8*T.agr)&&Math.abs(o.lat-c.lat)<CARW+12&&!(c.lap<=1&&R.mode==='race'&&!dead&&T.agr<L1A&&(tr.corner[(c.idx+12)%N]||tr.corner[(c.idx+25)%N]))&&(!yel||dead||o.recover>0||Math.hypot(o.vx,o.vy)<60))off=o.lat>c.lat?o.lat-(CARW+18):o.lat+(CARW+18);
+      /* v68: si el de delante va claramente más lento, busca hueco antes; y una vez decidido mantiene el carril de adelantar (antes, al apartarse un coche de lado dejaba de cumplir la condición, volvía detrás y frenaba) */
+      const strP=!tr.corner[c.idx]&&!tr.corner[(c.idx+20)%N]&&!tr.corner[(c.idx+40)%N], /* solo en recta: en frenada el de delante siempre va más lento y, manteniendo el carril, llegaban a la curva por el borde */
+        oSlowP=strP&&!dead&&Math.hypot(o.vx,o.vy)<0.85*Math.hypot(c.vx,c.vy),pW=strP&&c.passId===o.id&&R.t-(c.passT||0)<4;
+      if(d>0&&d<(dead?(HAZ?HAZD:22):oSlowP||pW?18:8+8*T.agr)&&Math.abs(o.lat-c.lat)<CARW+(pW?44:12)&&!(c.lap<=1&&R.mode==='race'&&!dead&&T.agr<L1A&&(tr.corner[(c.idx+12)%N]||tr.corner[(c.idx+25)%N]))&&(!yel||dead||o.recover>0||Math.hypot(o.vx,o.vy)<60)){off=o.lat>c.lat?o.lat-(CARW+18):o.lat+(CARW+18);if(!dead){c.passId=o.id;c.passT=R.t;}}
       // rueda con rueda: si está solapado a mi lado, le dejo un coche de hueco (no le cierro la puerta)
       if(Math.abs(d)*tr.sp<2*HL+10&&Math.abs(o.lat-c.lat)<CARW+20&&!dead&&(sideBy=true))off=o.lat>c.lat?Math.min(off,o.lat-(CARW+16)):Math.max(off,o.lat+(CARW+16));
       // doblados: si me alcanza alguien con una vuelta más, me aparto y aflojo
@@ -887,7 +897,7 @@ function physicsSim(R,c,dt){
   const pl0=c.isPlayer&&!c.bot,pl=pl0||(BOTPL&&c.bot),AID=pl0?R.aids:true,mu=gripLat(c,v,R)*(pl?1-0.07*Math.min(1,(c.rollLag||0)/1.6):1);
   const thr=(c.fuel>0||c.pit)&&!c.dnf&&!c.engineDead?c.throttle:0;
   // --- longitudinal ---
-  const skillP=c.isPlayer?1:Math.pow(c.skill,1.5);
+  const skillP=c.isPlayer?1:Math.pow(Math.min(1,c.skill),0.75); /* v68: el nivel ya no da más motor que el tuyo (con la adaptativa, hasta +11 % de potencia: se iban en recta); por debajo de 1, la mitad de efecto que antes. El ritmo de los buenos sale del agarre (BOTGK) */
   const hot=c.temp>124?0.93:1,EM=EMODES[c.emode==null?1:c.emode];
   const P=PWR*(c.cf?c.cf.pwr:1)*skillP*hot*EM.p*(c.eng<0.25?0.94:1)*(1+(c.kersOn?0.2:0))*(c.dRear>0?1-0.12*c.dRear:1)*(c.punct?0.7:1);
   const vTop=c.wheelOff!=null?230:VMAX*(0.93+0.12*c.gearS)*1.05;           // limitador según desarrollo (sin una rueda, el coche se arrastra: ~125 km/h como mucho)
@@ -1393,7 +1403,7 @@ function scStep(R,dt){
   for(const c of R.cars)if(c.wrecked&&!c.cleared&&R.t-sc.t0>18){c.cleared=true;c.clearAt=R.t+8;}
   sc.clear=!R.cars.some(c=>!c.pit&&!c.finished&&!c.cleared&&(c.dnf||c.engineDead||c.recover>0)&&Math.abs(c.lat)<W+60)&&!(R.debris&&R.debris.some(d=>Math.abs(d.lat)<W+KERB));
   // ¿pelotón agrupado? nadie a más de ~300 px del de delante (o se agota el tiempo)
-  {const run=R.cars.filter(c=>!c.pit&&!c.dnf&&!c.finished&&!c.engineDead).sort((a,b)=>b.prog-a.prog);let big=0;for(let k=1;k<run.length;k++)if((run[k-1].prog-run[k].prog)*tr.sp>(run[k].unlap?1e9:330))big++;sc.bunched=big===0&&(run.length<2||(run[0].prog-run[run.length-1].prog)*tr.sp<run.length*175) /* v46: todos en fila y pegados (antes valía un hueco grande y ~45 m por coche) */&&R.cars.filter(c=>c.pit&&!c.dnf&&!c.finished).length<=1;} // y nadie (o casi) en boxes // se tolera algún rezagado (coche tocado)
+  {const run=R.cars.filter(c=>!c.pit&&!c.dnf&&!c.finished&&!c.engineDead).sort((a,b)=>b.prog-a.prog);let big=0;for(let k=1;k<run.length;k++)/* v68: se tolera un rezagado y huecos de hasta ~70 m (antes ninguno >51 m: un solo coche descolgado alargaba el SC una vuelta) */if((run[k-1].prog-run[k].prog)*tr.sp>(run[k].unlap?1e9:450))big++;sc.bunched=big<=1&&(run.length<2||(run[0].prog-run[run.length-1].prog)*tr.sp<run.length*200) /* v46: todos en fila y pegados (antes valía un hueco grande y ~45 m por coche) */&&R.cars.filter(c=>c.pit&&!c.dnf&&!c.finished).length<=1;} // y nadie (o casi) en boxes // se tolera algún rezagado (coche tocado)
   /* v46: con la pista despejada, los doblados pasan al safety car y recuperan la vuelta antes de la relanzada */
   if(sc.phase==='out'&&sc.clear&&R.t-sc.t0>20&&R.mode==='race'){let n=0;
     for(const c of R.cars)if(!c.unlap&&c!==lead&&!c.pit&&!c.dnf&&!c.finished&&!c.engineDead&&lead.prog-c.prog>N*0.6){c.unlap=true;n++;if(R.fx&&c.isPlayer&&!c.bot)R.events.push({type:'unlap',car:c});}
@@ -1401,7 +1411,8 @@ function scStep(R,dt){
   /* hecho cuando ya ha pasado al safety car: luego da la vuelta y se pone a la cola (como en la F1) */
   for(const c of R.cars)if(c.unlap){const ah=((c.idx-Math.floor(sc.s))%N+N)%N;if(c.dnf||c.finished||(ah>30&&ah<N*0.5&&!c.pit))c.unlap=false;}
   const unlapping=R.cars.some(c=>c.unlap&&!c.pit);
-  if(sc.phase==='out'&&sc.clear&&lead.lap>=sc.leadLap0+1&&R.t-sc.t0>30&&((sc.bunched&&!unlapping)||R.t-sc.t0>240)){sc.phase='in';if(R.fx)R.events.push({type:'sc_in'});}
+  /* v68: con la pista despejada y el pelotón agrupado se anuncia la retirada sin esperar a que el líder cruce la meta (antes, si salía justo pasada la meta, había que dar casi una vuelta entera más); mínimo 40 s */
+  if(sc.phase==='out'&&sc.clear&&(lead.lap>=sc.leadLap0+1||R.t-sc.t0>40)&&R.t-sc.t0>30&&((sc.bunched&&!unlapping)||R.t-sc.t0>240)){sc.phase='in';if(R.fx)R.events.push({type:'sc_in'});}
   if(sc.phase==='gone'){if(lead.lap>sc.endLap||lead.finished){R.sc=null;if(R.fx)R.events.push({type:'sc_end'});}return;}
   const i=Math.floor(sc.s)%N,lim=SIMB?tr.vLimS[i]:tr.vLim[i];
   // espera al pelotón: si el líder está lejos, va más despacio
@@ -1471,7 +1482,7 @@ function stepRace(R,dt){
     // con ayudas, mantener el gas pisado deja las vueltas en 11.000 (control de lanzamiento); sin ayudas hay que dosificar
     for(const c of R.cars){if(c.isPlayer&&!c.bot){const up=R.aids?5200:7000,dn=R.aids?3800:5000; // sin limitador: si lo dejas pisado se pasa de vueltas; hay que dar toques
       let v=(c.lrpm||4500)+(R.input.up?up:-dn)*dt+(Math.random()-0.5)*1800*dt;c.lrpm=clamp(v,4200,18500);}}
-    if(R.cd>=R.lightsOut){const rr=R.redRestart;R.redRestart=false;R.phase='race';if(!rr)R.t=0;if(R.mode==='race'){if(R.rolling&&!rr){const lead=R.cars[0];R.standings=R.cars.slice();
+    if(R.cd>=R.lightsOut){const rr=R.redRestart;R.redRestart=false;R.phase='race';if(!rr)R.t=0;R.goT=R.t;if(R.mode==='race'){if(R.rolling&&!rr){const lead=R.cars[0];R.standings=R.cars.slice();
         R.sc={phase:'out',s:(lead.idx+45)%R.tr.N,lap:0,v:0,x:0,y:0,a:0,t0:-30,leadLap0:0,clear:true,pens:{},rolling:true};R.scCount=(R.scCount||0)+1;if(R.fx)R.events.push({type:'sc_rolling'});}
       else for(const c of R.cars)if(!c.dnf)launchStart(R,c);}}return;}
   R.t+=dt;
@@ -1615,7 +1626,9 @@ function stepRace(R,dt){
       // no cuenta si la amarilla es por ti (te has salido / vas lento), si acabas de volver a pista, o si pasas al coche accidentado o lento
       const pv=Math.hypot(p.vx,p.vy);if(p.off||p.recover>0||(!scOn&&pv<60))Y.offT=R.t;
       const mine=R.t-(Y.offT||-99)<6;
-      const inY=scOn?!(p.off||p.recover>0||p.unlap):!mine&&R.yellow.some(y=>{const d=(y-p.idx+N)%N;return d<110||d>N-45;});
+      /* v68: en la salida (vuelta 1, primeros 40 s) los cambios de puesto en el pelotón con amarilla no cuentan (sí con SC); y pasado el incidente la zona acaba a ~15 m (antes ~70 m) */
+      const l1pack=R.mode==='race'&&p.lap<=1&&R.t-(R.goT||0)<40;
+      const inY=scOn?!(p.off||p.recover>0||p.unlap):!mine&&!l1pack&&R.yellow.some(y=>{const d=(y-p.idx+N)%N;return d<110||d>N-15;});
       /* v61: si te sales de pista (o trompeas) con SC o amarilla, los que te pasan mientras tanto se apuntan: recuperar esos puestos no se sanciona */
       const offNow=p.off||p.recover>0||p.ooc>R.t||R.t-(Y.offT||-99)<3;Y.regain=Y.regain||{};
       for(const o of cars){if(o===p||o.dnf||o.finished)continue;const ahead=o.prog>p.prog;if(o.pit){Y.prev[o.id]=ahead;continue;}

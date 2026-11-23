@@ -665,7 +665,7 @@ document.addEventListener('click',e=>{
 const TRACK_OPTS=TRACKS.map((t,i)=>[i,t.short||t.name]);
 function trackSelect(id,cur){return `<select id="${id}" class="tsel">`+TRACKS.map((t,i)=>`<option value="${i}"${i===cur?' selected':''}>${esc(t.name)}${t.country?' · '+esc(t.country):''}</option>`).join('')+'</select>';}
 const OPT={laps:[[3,'3'],[5,'5'],[10,'10'],[20,'20']],diff:[['facil','Fácil'],['normal','Normal'],['dificil','Difícil'],['experto','Experto'],['auto','Adaptativa']],quali:[[1,'Sí'],[0,'No']],
-  mult:[[1,'x1'],[2,'x2'],[4,'x4']],comp:[['S','Blando'],['M','Medio'],['H','Duro'],['I','Interm.'],['W','Lluvia']],weather:[['dry','Seco'],['var','Variable'],['rain','Lluvia']],weatherC:[['dry','Seco'],['var','Variable'],['rain','Lluvia'],['rand','Aleatorio']],fuel:[['full','Toda la carrera'],['half','Media']],cars:[[8,'8'],[12,'12'],[16,'16'],[20,'20'],[22,'22']],damage:[[1,'Sí'],[0,'No']],aids:[[1,'Sí'],[0,'No']],scOn:[[1,'Sí'],[0,'No']],weekend:[[1,'Sí'],[0,'No']],autoRep:[[1,'Sí'],[0,'No']],formation:[[1,'Sí'],[0,'No']],tod:[['day','Día'],['sunset','Atardecer'],['dusk','Anochece'],['night','Noche']],engMode:[['synth','V10'],['synth0','Sintetizado antiguo'],['sample','Archivo propio']],incidents:[[0,'No'],[1,'Pocos'],[2,'Normal'],[3,'Muchos']],scModel:[['gt','GT blanco'],['blue','GT azul'],['white','Deportivo']],voice:[[1,'Con voz'],[0,'Solo texto']],steer:[['sim','Simulación'],['arcade','Arcade']]};
+  mult:[[1,'x1'],[2,'x2'],[4,'x4']],comp:[['S','Blando'],['M','Medio'],['H','Duro'],['I','Interm.'],['W','Lluvia']],weather:[['dry','Seco'],['var','Variable'],['rain','Lluvia'],['rand','Aleatorio']],weatherC:[['dry','Seco'],['var','Variable'],['rain','Lluvia'],['rand','Aleatorio']],fuel:[['full','Toda la carrera'],['half','Media']],cars:[[8,'8'],[12,'12'],[16,'16'],[20,'20'],[22,'22']],damage:[[1,'Sí'],[0,'No']],aids:[[1,'Sí'],[0,'No']],scOn:[[1,'Sí'],[0,'No']],weekend:[[1,'Sí'],[0,'No']],autoRep:[[1,'Sí'],[0,'No']],formation:[[1,'Sí'],[0,'No']],tod:[['day','Día'],['sunset','Atardecer'],['dusk','Anochece'],['night','Noche']],engMode:[['synth','V10'],['synth0','Sintetizado antiguo'],['sample','Archivo propio']],incidents:[[0,'No'],[1,'Pocos'],[2,'Normal'],[3,'Muchos']],scModel:[['gt','GT blanco'],['blue','GT azul'],['white','Deportivo']],voice:[[1,'Con voz'],[0,'Solo texto']],steer:[['sim','Simulación'],['arcade','Arcade']]};
 function showOnly(id){['menu','settings','quick','champ','teams','pause','results','prerace','welcome','records'].forEach(x=>$(x).classList.toggle('hidden',x!==id));}
 
 function steerAdjHtml(){
@@ -1115,7 +1115,7 @@ function startAttract(){
 }
 function showHud(v){$('hud').classList.toggle('hidden',!v);}
 
-function launch(cfg,btn){
+function launch(cfg,btn){if(cfg.weather==='rand'){const u=Math.random();cfg.weather=u<0.5?'dry':u<0.85?'var':'rain';} /* v68: clima aleatorio también en carrera rápida (no se sabe hasta ver la previsión) */
   audioInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
   const txt=btn.innerHTML;btn.disabled=true;btn.innerHTML=btn.classList.contains('mi')?'<b>Preparando…</b>':'Preparando…';
   setTimeout(()=>{try{newEvent(cfg);}finally{btn.disabled=false;btn.innerHTML=txt;}},30);
@@ -2969,17 +2969,35 @@ function drawSunGlow(){
 }
 // lluvia en la lente: gotas que se quedan pegadas y resbalan; se secan al parar de llover
 const LENS=[];
-function drawLens(dt){
+/* v68: gotas de verdad: cada una refracta la escena (se ve lo de detrás pequeño, al revés y algo borroso), borde oscuro arriba, luz concentrada abajo y un brillo pequeño.
+   Una copia de la imagen a 1/4 por fotograma (barata) de la que muestrea cada gota. Antes: círculos con brillo blanco y aro oscuro (parecían pompas) */
+let LENSBUF=null;
+function drawLens(dt){if(!(dt>0)||dt>0.1)dt=0.016;
   const rain=R.weather&&R.weather.type!=='dry'?rainAt(R.weather,cam.x,cam.y):0,sp=R.player?Math.hypot(R.player.vx,R.player.vy):0;
-  if(rain>0.15&&LENS.length<55&&Math.random()<rain*dt*26)LENS.push({x:Math.random()*VW,y:Math.random()*VH*0.85,r:3.5+Math.random()*8*Math.min(1,rain+0.3),vy:0,life:1,stick:Math.random()<0.6});
-  if(!LENS.length)return;ctx.save();ctx.setTransform(DPR,0,0,DPR,0,0);
+  if(rain>0.15&&LENS.length<60&&Math.random()<rain*dt*26){const big=Math.random()<0.55;LENS.push({x:Math.random()*VW,y:Math.random()*VH*0.9,r:big?3+Math.random()*7*Math.min(1,rain+0.3):0.8+Math.random()*1.6,e:0.8+Math.random()*0.35,vy:0,life:1,stick:Math.random()<0.65,trail:[]});}
+  if(!LENS.length)return;
+  const K=4,bw=Math.max(1,Math.floor(cv.width/K)),bh=Math.max(1,Math.floor(cv.height/K));
+  if(!LENSBUF||LENSBUF.width!==bw||LENSBUF.height!==bh){LENSBUF=document.createElement('canvas');LENSBUF.width=bw;LENSBUF.height=bh;}
+  const bg=LENSBUF.getContext('2d');bg.imageSmoothingEnabled=true;bg.drawImage(cv,0,0,bw,bh);
+  const sc=DPR/K;ctx.save();ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;
   for(let i=LENS.length-1;i>=0;i--){const d=LENS[i];
-    if(!d.stick||d.r>5.5)d.vy=Math.min(80,d.vy+dt*(18+sp*0.05));d.y+=d.vy*dt;d.x+=(d.x-VW/2)/VW*sp*0.02*dt*60;d.life-=dt*(rain>0.15?0.06:0.35);
+    if(!d.stick||d.r>5.5){const vy0=d.vy;d.vy=Math.min(80,d.vy+dt*(18+sp*0.05));if(vy0>20&&d.r>2){d.trail.push([d.x,d.y]);if(d.trail.length>14)d.trail.shift();}}
+    d.y+=d.vy*dt;d.x+=(d.x-VW/2)/VW*sp*0.02*dt*60;d.life-=dt*(rain>0.15?0.06:0.35);
     if(d.life<=0||d.y>VH+10){LENS.splice(i,1);continue;}
-    const a=Math.min(1,d.life*2);
-    if(d.vy>20){ctx.strokeStyle='rgba(210,225,245,'+(0.12*a)+')';ctx.lineWidth=d.r*0.7;ctx.beginPath();ctx.moveTo(d.x,d.y-d.vy*0.25);ctx.lineTo(d.x,d.y);ctx.stroke();}
-    const g=ctx.createRadialGradient(d.x-d.r*0.3,d.y-d.r*0.35,d.r*0.1,d.x,d.y,d.r);g.addColorStop(0,'rgba(255,255,255,'+(0.6*a)+')');g.addColorStop(0.5,'rgba(200,220,245,'+(0.2*a)+')');g.addColorStop(0.82,'rgba(15,22,35,'+(0.42*a)+')');g.addColorStop(1,'rgba(20,30,45,0)');
-    ctx.fillStyle=g;ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,Math.PI*2);ctx.fill();}
+    const a=Math.min(1,d.life*2),r=d.r,rx=r,ry=r*d.e*(d.vy>20?1.15:1);
+    /* reguero: rastro fino y claro por donde ha resbalado */
+    if(d.trail.length>1){ctx.strokeStyle='rgba(225,235,250,'+(0.09*a)+')';ctx.lineWidth=Math.max(0.8,r*0.35);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(d.trail[0][0],d.trail[0][1]);for(const q of d.trail)ctx.lineTo(q[0],q[1]);ctx.lineTo(d.x,d.y);ctx.stroke();}
+    if(r<2.2){ctx.fillStyle='rgba(215,228,245,'+(0.22*a)+')';ctx.beginPath();ctx.arc(d.x,d.y,r,0,6.283);ctx.fill();ctx.fillStyle='rgba(255,255,255,'+(0.35*a)+')';ctx.fillRect(d.x-r*0.35,d.y-r*0.45,r*0.4,r*0.4);continue;}
+    ctx.save();ctx.globalAlpha=0.92*a;ctx.beginPath();ctx.ellipse(d.x,d.y,rx,ry,0,0,6.283);ctx.clip();
+    /* refracción: la gota hace de lente gran angular invertida (lo de arriba se ve abajo): muestra un trozo ~4 veces mayor que ella */
+    const sr=r*4.2;ctx.translate(d.x,d.y);ctx.scale(-1,-1);
+    ctx.drawImage(LENSBUF,(d.x-sr)*sc,(d.y-sr)*sc,2*sr*sc,2*sr*sc,-rx,-ry,2*rx,2*ry);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    /* borde: oscuro arriba (refleja el cielo tapado por la gota), luz concentrada abajo */
+    const g=ctx.createLinearGradient(d.x,d.y-ry,d.x,d.y+ry);g.addColorStop(0,'rgba(10,14,22,.55)');g.addColorStop(0.35,'rgba(10,14,22,0)');g.addColorStop(0.8,'rgba(255,255,255,0)');g.addColorStop(1,'rgba(235,242,255,.35)');
+    ctx.fillStyle=g;ctx.fillRect(d.x-rx,d.y-ry,2*rx,2*ry);ctx.restore();
+    ctx.strokeStyle='rgba(8,12,20,'+(0.28*a)+')';ctx.lineWidth=0.8;ctx.beginPath();ctx.ellipse(d.x,d.y,rx,ry,0,Math.PI*1.05,Math.PI*1.95);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,'+(0.75*a)+')';ctx.beginPath();ctx.ellipse(d.x-rx*0.35,d.y-ry*0.45,Math.max(0.6,rx*0.16),Math.max(0.5,ry*0.11),-0.5,0,6.283);ctx.fill();}
   ctx.restore();
 }
 // celebración: confeti si haces podio, fuegos artificiales si ganas
