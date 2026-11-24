@@ -439,7 +439,7 @@ body:not(.compact) #car{bottom:auto;top:200px}
 <div class="tb sm" data-k="pause" style="left:16px;bottom:104px">II</div>
 
 <div id="menu" class="overlay home">
-  <div id="verTag">v72</div>
+  <div id="verTag">v73</div>
   <div class="card">
     <div class="mtop"><div class="brand"><div class="flag"></div><h1>MINI <span>GP</span></h1></div>
       <div class="micons"><button class="mico" id="bSettings" title="Ajustes" aria-label="Ajustes"></button><button class="mico" id="bFull" title="Pantalla completa" aria-label="Pantalla completa"></button><button class="mico" id="bHelp" title="Cómo se juega" aria-label="Cómo se juega"></button></div></div>
@@ -2271,7 +2271,8 @@ function saveTeams(){sset('minigp3_teams',TEAMS);}
 function saveChamp(){if(CH&&CH.career){if(CR){CR.ch=CH;sset('minigp6_career',CR);}}else sset('minigp4_champ',CH);}
 setUsePhoto(settings.photo===1); /* v45: foto aérea solo si se eligió en Ajustes */
 ADAPT=0;WADAPT=settings.adaptW||0;
-function saveSettings(){sset('minigp3_settings',settings);applyPhotoSetting();if(ui&&(ui.rtx!==settings.realtex||ui.rlk!==settings.reallook)){ui.rtx=settings.realtex;ui.rlk=settings.reallook;try{clearTiles();}catch(e){}}}
+/* v73: al cargar por primera vez (sin ajustes guardados) una migración llamaba aquí antes de existir ui y el juego no arrancaba */
+function saveSettings(){sset('minigp3_settings',settings);try{applyPhotoSetting();}catch(e){}let U=null;try{U=ui;}catch(e){}if(U&&(U.rtx!==settings.realtex||U.rlk!==settings.reallook)){U.rtx=settings.realtex;U.rlk=settings.reallook;try{clearTiles();}catch(e){}}}
 /* v45: foto aérea opcional: al cambiarla se rehacen circuito y baldosas */
 function applyPhotoSetting(){const v=settings.photo===1;if(typeof USE_PHOTO!=='undefined'&&USE_PHOTO!==v){setUsePhoto(v);for(const k in GFX)delete GFX[k];if(typeof TRK_CACHE!=='undefined')for(const k in TRK_CACHE)delete TRK_CACHE[k];try{clearTiles();}catch(e){}}}
 // v43: el consumo x2 por defecto convertía las carreras cortas en una lotería de paradas; se pasa una vez a x1 (se puede volver a subir)
@@ -2893,7 +2894,7 @@ function stepHtml(label,store,key,opts){const cur=String(STORES[store][key]);con
 document.addEventListener('click',e=>{const b=e.target.closest('.stp .ctl button');if(!b)return;const w=b.closest('.stp'),store=STORES[w.dataset.store],k=w.dataset.set,opts=JSON.parse(w.dataset.opts);
   let i=opts.findIndex(o=>String(o[0])===String(store[k]));i=((i<0?0:i)+(+b.dataset.d)+opts.length)%opts.length;store[k]=NUMKEYS.includes(k)?parseInt(opts[i][0],10):opts[i][0];w.querySelector('.val').textContent=opts[i][1];
   if(w.dataset.store==='settings')saveSettings();if((k==='track'||k==='laps')&&!$('quick').classList.contains('hidden'))openQuick();});
-const NUMKEYS=['tvcam','realtex','reallook','qlive','qlen','radioLvl','track','laps','quali','mult','cars','damage','aids','incidents','weekend','autoRep','formation','scOn','radio','voice','snd','ghost','vib','drsAuto','cornerHint','qfmt','adaptOn','carStyle','perf','real3d'];
+const NUMKEYS=['tvcam','realtex','reallook','qlive','qlen','radioLvl','track','laps','quali','mult','cars','damage','aids','incidents','weekend','autoRep','formation','scOn','radio','voice','snd','ghost','vib','drsAuto','cornerHint','qfmt','adaptOn','carStyle','perf','real3d','ghostRace'];
 document.addEventListener('click',e=>{
   const b=e.target.closest('.seg button');if(!b)return;
   const seg=b.parentElement,store=STORES[seg.dataset.store],k=seg.dataset.set,v=b.dataset.v;
@@ -2982,7 +2983,7 @@ function voiceSelect(){const vs=esVoices(),best=pickVoice();if(!vs.length)return
 function openSettings(){
   $('steerSeg').innerHTML=segHtml('settings','steer',OPT.steer);$('steerAdjMenu').innerHTML=steerAdjHtml();$('engSnd').innerHTML=engSoundHtml();
   $('sndOpts').innerHTML=`<span class="fl">Ingeniero por radio</span>${segHtml('settings','voice',OPT.voice)}<span class="fl">Cuánto habla</span>${segHtml('settings','radioLvl',[[0,'Solo lo importante'],[1,'Normal']])}<span class="fl">Voz del ingeniero</span>${voiceSelect()}<span class="fl">Sonido general</span>${segHtml('settings','snd',[[1,'Activado'],[0,'Silencio']])}<span class="fl">Vibración (móvil)</span>${segHtml('settings','vib',[[1,'Sí'],[0,'No']])}`;
-  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Repeticiones</span>${segHtml('settings','tvcam',[[1,'Cámaras de TV'],[0,'Detrás del coche']])}<span class="fl">Circuito en 3D (Monza; necesita internet)</span>${segHtml('settings','real3d',[[1,'Sí'],[0,'No']])}<span class="fl">Medidor de rendimiento (fps y tirones)</span>${segHtml('settings','perf',[[0,'No'],[1,'Sí']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
+  $('viewOpts').innerHTML=`<span class="fl">Cámara</span>${segHtml('settings','cam',[['fixed','Fija (norte arriba)'],['rot','Detrás del coche']])}<span class="fl">Zoom en el móvil</span>${segHtml('settings','mzoom',[[2,'Cerca'],[1,'Normal'],[0,'Lejos']])}<span class="fl">Repeticiones</span>${segHtml('settings','tvcam',[[1,'Cámaras de TV'],[0,'Detrás del coche']])}<span class="fl">Circuito en 3D (Monza; necesita internet)</span>${segHtml('settings','real3d',[[1,'Sí'],[0,'No']])}<span class="fl">Medidor de rendimiento (fps y tirones)</span>${segHtml('settings','perf',[[0,'No'],[1,'Sí']])}<span class="fl">Coche fantasma en clasificación</span>${segHtml('settings','ghost',[[1,'Sí'],[0,'No']])}<span class="fl">Fantasma en carrera (tu mejor vuelta)</span>${segHtml('settings','ghostRace',[[1,'Sí'],[0,'No']])}<span class="fl">Aviso de curva siguiente</span>${segHtml('settings','cornerHint',[[1,'Primeras vueltas'],[2,'Siempre'],[0,'No']])}<span class="fl">DRS</span>${segHtml('settings','drsAuto',[[0,'Manual (pulsar F o KERS/DRS)'],[1,'Automático']])}`;
   $('engPick').onclick=engWavPick;if($('engDel'))$('engDel').onclick=()=>{try{localStorage.removeItem(ENGWAV_KEY);}catch(e){}settings.engMode='synth';saveSettings();engSampleStop();openSettings();};
   if($('voiceSel')){$('voiceSel').onchange=e=>{settings.voiceName=e.target.value;saveSettings();};$('voiceTry').onclick=()=>{try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance('Box, box. Ponemos medios y salimos por delante de Ortega.');u.lang='es-ES';u.rate=1.06;const v=pickVoice();if(v)u.voice=v;speechSynthesis.speak(u);}catch(e){}};}
   setTab(ui.setTab||'drive');showOnly('settings');}
@@ -4075,14 +4076,18 @@ function ghostRecord(){
 }
 function ghostLapDone(time){ // al cerrar vuelta: si es la mejor, se guarda como fantasma
   const p=R.player;if(!GHOST.rec||GHOST.rec.length<30||p.warns>(GHOST.warns0||0))return;
+  /* v73: en carrera, tu mejor vuelta de esta carrera (sin la 1.ª, que sale de parado) es el fantasma */
+  if(R.mode==='race'&&p.lap>2&&(!GHOST.race||GHOST.race.r!==R||time<GHOST.race.t))GHOST.race={r:R,t:time,d:GHOST.rec.slice(),color:p.color,color2:p.color2};
   if(!GHOST.data||time<GHOST.data.t){GHOST.data={t:time,d:GHOST.rec.slice(),name:p.name,color:p.color,color2:p.color2};sset(GHOST.ti,GHOST.data);return true;}
 }
 function drawGhost(){
-  if(!settings.ghost||!GHOST.data||attract||!R||R.mode!=='quali')return;const p=R.player;if(p.lap<1)return;
-  const d=GHOST.data.d,t=(R.t-p.lapStart)/0.05,i=Math.floor(t),f=t-i;if(i*3+5>=d.length)return;
+  if(attract||!R)return;const p=R.player;if(p.lap<1||p.pit)return;
+  const race=R.mode==='race',G0=race?(settings.ghostRace!==0&&GHOST.race&&GHOST.race.r===R?GHOST.race:null):(settings.ghost&&R.mode==='quali'?GHOST.data:null);if(!G0)return; /* v73: también en carrera */
+  const d=G0.d,t=(R.t-p.lapStart)/0.05,i=Math.floor(t),f=t-i;if(i*3+5>=d.length)return;
   const x=d[i*3]+(d[i*3+3]-d[i*3])*f,y=d[i*3+1]+(d[i*3+4]-d[i*3+1])*f,a=d[i*3+2]+angNorm(d[i*3+5]-d[i*3+2])*f;
-  const sp=svgCar({color:GHOST.data.color||'#ffffff',color2:GHOST.data.color2||'#ffffff',dWing:0,isPlayer:true,slot:0,compound:'S'});if(!sp)return;
-  ctx.save();ctx.translate(x,y);ctx.rotate(a);ctx.globalAlpha=0.38;ctx.drawImage(sp,-DW/2,-DH/2,DW,DH);ctx.restore();ctx.globalAlpha=1;
+  /* el dibujo svg ya no se carga (coche 3D): se usa el sprite de tu coche */
+  const sp=(settings.carStyle===2&&C3.st===2&&c3Sprite(p))||realCar(p)||svgCar({color:G0.color||'#ffffff',color2:G0.color2||'#ffffff',dWing:0,isPlayer:true,slot:0,compound:'S'});if(!sp)return;
+  ctx.save();ctx.translate(x,y);ctx.rotate(a);ctx.globalAlpha=race?0.26:0.38;ctx.drawImage(sp,-DW/2,-DH/2,DW,DH);ctx.restore();ctx.globalAlpha=1;
 }
 // ---------- repetición: últimos 25 s ----------
 const RB={buf:[],acc:0};
@@ -5896,7 +5901,11 @@ function updateHud(dt){
     }
     $('tlast').textContent=fmt(p.lastLap);$('tbest').textContent=fmt(p.bestLap);$('trec').textContent=fmt(ui.record);
     {const sb=R.secBest||[],ps=p.secBest||[],sc=p.sec||[];$('tsec').innerHTML=[0,1,2].map(i=>{const t=sc[i];if(t==null)return '<span class="sx" style="opacity:.55">S'+(i+1)+'</span>';
-      const col=sb[i]!=null&&t<=sb[i]+1e-6?'#b36bff':ps[i]!=null&&t<=ps[i]+1e-6?'#2ee66b':'#ffd23f';return `<span class="sx" style="border-bottom-color:${col};color:${col}">${t.toFixed(2)}</span>`;}).join('');}
+      const col=sb[i]!=null&&t<=sb[i]+1e-6?'#b36bff':ps[i]!=null&&t<=ps[i]+1e-6?'#2ee66b':'#ffd23f';
+      /* v73: diferencia con el mejor bot en ese sector (su mejor tiempo de la sesión) */
+      let bb=null;for(const c of R.cars)if(c!==p&&c.secBest&&c.secBest[i]!=null&&(!bb||c.secBest[i]<bb.secBest[i]))bb=c;
+      const dd=bb?t-bb.secBest[i]:null,dh=dd==null?'':`<small style="display:block;font-size:10px;color:${dd<=0?'#2ee66b':'#ff8a7a'}">${dd>0?'+':''}${dd.toFixed(2)}</small>`;
+      return `<span class="sx" title="${bb?'Mejor bot: '+bb.name+' '+bb.secBest[i].toFixed(2):''}" style="border-bottom-color:${col};color:${col}">${t.toFixed(2)}${dh}</span>`;}).join('');}
     // delta en directo contra tu mejor vuelta (traza guardada punto a punto)
     {const d=ui.bestTrace&&p.lap>=1?(R.t-p.lapStart)-ui.bestTrace[p.idx]:null,el=$('tdelta');
       if(d!=null&&isFinite(d)&&Math.abs(d)<30){el.textContent=(d>0?'+':'−')+Math.abs(d).toFixed(2);el.style.background=d>0?'rgba(255,70,70,.25)':'rgba(46,230,107,.22)';el.style.color=d>0?'#ff8a8a':'#5ef28f';}
