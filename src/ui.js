@@ -282,7 +282,9 @@ const BIOMES={
   city:{ftex:['pitbox','pitbox','dryfield','grass','pitbox'],ground:'rgba(110,112,108,.38)',fields:['rgba(120,122,118,.75)','rgba(100,104,100,.75)','rgba(135,130,120,.75)','rgba(90,110,80,.7)','rgba(115,115,110,.75)'],trees:{palm:0.4,dec:0.6},dens:0.35,camp:0},
   plain:{woods:8,ground:'rgba(120,120,60,.10)',fields:['rgba(150,150,80,.8)','rgba(120,140,70,.78)','rgba(170,160,95,.75)','rgba(100,125,60,.72)','rgba(140,130,80,.7)'],trees:{dec:1},dens:0.6,camp:2}};
 /* v66: aspecto realista de prueba (de momento solo Monza): bosque denso con luz y sombra, sombras suaves, guardarraíles, tribunas con filas, colores apagados */
-BIOMES.monza=Object.assign({},BIOMES.park,{real:true,woods:0,dens:1,ground:'rgba(160,150,86,.14)'});
+BIOMES.monza=Object.assign({},BIOMES.park,{real:true,woods:0,dens:1,ground:'rgba(160,150,86,.14)',forest:1});
+/* v75: aspecto realista y 3D en todos los circuitos; cuánto bosque tiene cada paisaje (1 = Monza) y sin las manchas de bosque 2D (las sustituyen los árboles 3D) */
+{const FD={med:0.45,forest:1,alpine:0.9,park:0.8,farm:0.4,desert:0.03,dunes:0.4,tropical:0.8,savanna:0.22,city:0.1,plain:0.35};for(const k in FD)Object.assign(BIOMES[k],{real:true,forest:FD[k],woods:0});BIOMES.desert.mow=false;BIOMES.city.mow=false;BIOMES.dunes.mow=false;} /* sin franjas de césped sobre arena o ciudad */
 const TRACK_BIOME={'Montmeló':'med','Madring':'city','Jarama':'med','Paul Ricard':'med','Portimão':'med','Estoril':'med','Istanbul Park':'med','Mugello':'med',
   'Spa-Francorchamps':'forest','Nürburgring':'forest','Watkins Glen':'forest','Red Bull Ring':'alpine','Hungaroring':'farm','Silverstone':'farm','Zandvoort':'dunes',
   'Monza':'monza','Imola':'park','Albert Park':'park','Interlagos':'park','México':'park','Buenos Aires':'park','Sochi':'park',
@@ -2505,7 +2507,7 @@ function drawStatic(ctx,G,tr,bx0,by0,bx1,by1){ // capa estática del circuito (s
   const RL=realOf(tr);if(RL){const SV=sunVec();ctx.save();ctx.translate(SV.x*3,SV.y*3);S('rgba(0,0,0,.3)',2*RUNOFF+18,'path');ctx.restore();}
   S('#8f9296',2*RUNOFF+14,'path');if(RL){ctx.save();ctx.lineCap='butt';ctx.setLineDash([2.2,15]);S('#3a3e44',2*RUNOFF+14,'path');ctx.restore();S('rgba(255,255,255,.35)',2*RUNOFF+8,'path');} /* v66: guardarraíl con postes */
   S('#d8d8d8',2*RUNOFF+5,'path');const RLg=realOf(tr);S(PAT.runoff,2*RUNOFF,'path');if(RLg)S('rgba(100,106,62,.3)',2*RUNOFF,'path');{const th=themeOf(tr);if(th&&th.ground)S(th.ground,2*RUNOFF,'path');} /* v60: la hierba junto a la pista también toma el color del paisaje */
-  if(realOf(tr)){ /* v67: césped cortado a franjas (perpendiculares a la pista) y hierba gastada y más seca junto a los pianos */
+  if(realOf(tr)&&(themeOf(tr)||{}).mow!==false){ /* v67: césped cortado a franjas (perpendiculares a la pista) y hierba gastada y más seca junto a los pianos */
     ctx.save();ctx.lineCap='butt';ctx.setLineDash([34,34]);S('rgba(220,235,170,.07)',2*RUNOFF-6,'path');ctx.lineDashOffset=34;S('rgba(20,40,10,.07)',2*RUNOFF-6,'path');ctx.restore();
     S('rgba(120,108,60,.16)',2*(W+KERB)+34,'path');S('rgba(110,96,52,.18)',2*(W+KERB)+16,'path');}
   const RW=RUNOFF-28-W-KERB,RG=GRAV_OUT-W-KERB;
@@ -2592,10 +2594,10 @@ function forestFor(tr){const G=gfxFor(tr);if(G.forest)return G.forest;const t0=p
   {const D=decoFor(tr);for(const C2 of D.camps)mark(C2.x,C2.y,300);for(const h of D.homes)mark(h.x,h.y,120);}
   const hsh=(i,j)=>{let h=(i*374761393+j*668265263+tr.ti*982451653)|0;h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;};
   const vn=(x,y)=>{const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j,ux=fx*fx*(3-2*fx),uy=fy*fy*(3-2*fy),a=hsh(i,j),b2=hsh(i+1,j),c=hsh(i,j+1),d=hsh(i+1,j+1);return a+(b2-a)*ux+(c-a)*uy+(a-b2-c+d)*ux*uy;};
-  const Rd=rng(tr.ti*613+5),SP=38,bk=new Map();let n=0;
+  const Rd=rng(tr.ti*613+5),SP=38,bk=new Map(),thF=themeOf(tr),FT=0.36+(1-((thF&&thF.forest!=null)?thF.forest:1))*0.62;let n=0;
   for(let y=y0;y<y1;y+=SP)for(let x=x0;x<x1;x+=SP){const px=x+(Rd()-0.5)*SP*0.9,py=y+(Rd()-0.5)*SP*0.9,X=Math.floor((px-x0)/C),Y=Math.floor((py-y0)/C);
     if(X<0||Y<0||X>=nx||Y>=ny||bad[Y*nx+X])continue;
-    const ns=0.62*vn(px/1100,py/1100)+0.38*vn(px/300,py/300);if(ns<0.36)continue;if(ns<0.45&&Rd()>(ns-0.36)/0.09)continue; /* claros y bordes con árboles sueltos */
+    const ns=0.62*vn(px/1100,py/1100)+0.38*vn(px/300,py/300);if(ns<FT)continue;if(ns<FT+0.09&&Rd()>(ns-FT)/0.09)continue; /* v75: FT sube con menos bosque en el paisaje */ /* claros y bordes con árboles sueltos */
     const t={x:px,y:py,r:22+Rd()*9,v:Math.floor(Rd()*8)},key=Math.floor(px/TILE)+','+Math.floor(py/TILE);let L=bk.get(key);if(!L)bk.set(key,L=[]);L.push(t);n++;}
   G.forest={bk,n,ms:Math.round(performance.now()-t0)};return G.forest;}
 function drawForest(g,tr,bx0,by0,bx1,by1){const F=forestFor(tr),SV=sunVec(),sp=canopySpr(),L=[];
@@ -2739,7 +2741,7 @@ function b3Merge(T,list){let n=0;for(const g of list){const q=g.index?g.toNonInd
   for(const g0 of list){const g=g0.index?g0.toNonIndexed():g0;if(!g.attributes.normal)g.computeVertexNormals();pos.set(g.attributes.position.array,o);nor.set(g.attributes.normal.array,o);o+=g.attributes.position.array.length;}
   const G=new T.BufferGeometry();G.setAttribute('position',new T.BufferAttribute(pos,3));G.setAttribute('normal',new T.BufferAttribute(nor,3));return G;}
 /* edificios del circuito (una vez por circuito): naves de cubierta plana y casas con tejado a dos aguas */
-function b3Track(tr){const T=B3.T;for(const m of B3.bld){B3.sc.remove(m);m.geometry.dispose();}B3.bld=[];B3.tr=tr;
+function b3Track(tr){const T=B3.T;for(const m of B3.bld){B3.sc.remove(m);m.traverse(o=>{if(o.geometry)o.geometry.dispose();});} /* v75: los edificios son grupos (antes fallaba al cambiar de circuito) */B3.bld=[];B3.tr=tr;
   const E=tr.env||{bld:[]},wall=new T.MeshStandardMaterial({color:0xd9d2c4,roughness:0.9}),mats={};
   for(const b of E.bld){const col=ROOF_COL[b.c]||'#888888';const rm=mats[col]||(mats[col]=new T.MeshStandardMaterial({color:new T.Color(col),roughness:b.ind?0.6:0.85,metalness:b.ind?0.25:0}));
     const grp=new T.Group();const H=b.ind?62:36;
@@ -2764,7 +2766,7 @@ B3.ground.position.set(cx,0,cz);B3.ground.scale.set(TILE,TILE,1);
     if(kind==='dec')C.setHSL(0.2+((s*7.3)%1)*0.09,0.32+((s*3.1)%1)*0.2,0.17+((s*5.7)%1)*0.1);else if(kind==='con')C.setHSL(0.33+((s*3.7)%1)*0.05,0.3,0.13+((s*2.3)%1)*0.06);else C.setHSL(0.23,0.3,0.2+((s*4.1)%1)*0.06);
     m.setColorAt(n[kind],C);n[kind]++;};
   const F=forestFor(tr),bx0=x0-B3M,by0=y0-B3M,bx1=x0+TILE+B3M,by1=y0+TILE+B3M;
-  for(let yy=Math.floor(by0/TILE);yy<=Math.floor(by1/TILE);yy++)for(let xx=Math.floor(bx0/TILE);xx<=Math.floor(bx1/TILE);xx++){const a=F.bk.get(xx+','+yy);if(a)for(const t of a)if(t.x>bx0&&t.x<bx1&&t.y>by0&&t.y<by1)put('dec',t.x,t.y,t.r,(t.v+1)*0.137+t.x*0.0001,1);}
+  for(let yy=Math.floor(by0/TILE);yy<=Math.floor(by1/TILE);yy++)for(let xx=Math.floor(bx0/TILE);xx<=Math.floor(bx1/TILE);xx++){const a=F.bk.get(xx+','+yy);if(a)for(const t of a)if(t.x>bx0&&t.x<bx1&&t.y>by0&&t.y<by1){const sd=((t.x*0.0137+t.y*0.0071)%1+1)%1,kd=th&&th.trees?treeKind(Object.assign({},th,{dens:1}),{s:sd,x:t.x})||'dec':'dec';put(kd==='palm'?'pine':kd,t.x,t.y,t.r,(t.v+1)*0.137+t.x*0.0001,1);}}
   for(const t of tr.trees){if(t.x<bx0||t.x>bx1||t.y<by0||t.y>by1)continue;const kd=treeKind(th,t);if(!kd)continue;put(kd==='palm'?'pine':kd,t.x,t.y,t.r*1.1,t.s,1.15);
     if(th&&th.dens>1&&((t.s*31.7)%1)<th.dens-1)put(kd==='palm'?'pine':kd,t.x+28*Math.cos(t.s*40),t.y+28*Math.sin(t.s*40),t.r*0.95,(t.s*3.3)%1,1.1);}
   /* sin árboles ni edificios cerca: la baldosa se queda como está (no hace falta el 3D) */
