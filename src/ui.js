@@ -1337,6 +1337,14 @@ document.addEventListener('fullscreenchange',fsLabel);document.addEventListener(
 $('bQuick').onclick=openQuick;$('bPlay').onclick=()=>quickPlay($('bPlay'));$('bHelp').onclick=openWelcome;$('bSettings').onclick=openSettings;$('setBack').onclick=openMenu;$('bChamp').onclick=()=>{if(CH&&CH.career)CH=sget('minigp4_champ',null);openChamp();};$('bCareer').onclick=openCareer;$('bTeams').onclick=openTeams;$('bRecs').onclick=openRecords;
 
 // pedir box: el juego se pausa y eliges gomas y gasolina (PC y móvil)
+/* v72: piezas dañadas en el menú de parada: tiempo de reparación (según tus mecánicos) y si compensa con las vueltas que quedan */
+function repairHtml(p){const pl=repairPlan(R,p),mk=mechOf(p),lv=Math.round(1+mk*4);
+  const issue=p.issue==='oil'?'motor':p.issue==='brakes'?'frenos':'';
+  if(!pl.list.length)return issue?`<div class="hint" style="color:#ffb36b">${issue}: no se puede reparar en boxes.</div>`:'';
+  const pre=p.repSel||pl.list.filter(q=>q.g>0||(q.k==='dWing'&&p.fixNose!==false)).map(q=>q.k);
+  return `<div class="sec"><h3>${icon('gear',18)} Reparaciones <small style="font-weight:500;opacity:.75">· mecánicos ${'●'.repeat(lv)}${'○'.repeat(5-lv)}</small></h3>`+
+    pl.list.map(q=>`<label style="display:flex;gap:10px;align-items:center;font-size:15px;cursor:pointer;margin:4px 0"><input type="checkbox" class="rpk" data-k="${q.k}" ${pre.includes(q.k)?'checked':''} style="width:22px;height:22px"> ${q.n} (${q.k==='dRear'&&p.rwOff?'arrancado':Math.round(q.d*100)+' %'}) · ~${Math.round(q.t)} s ${q.g>0?'<em style="color:#3ddc84;font-style:normal">compensa</em>':'<em style="color:#9aa3ad;font-style:normal">no compensa</em>'}</label>`).join('')+
+    `<div class="hint">Con buenos mecánicos se tarda menos y suele quedar como nuevo; si no, puede alargarse o quedar a medias.${issue?' '+issue+': no se puede reparar.':''}</div></div>`;}
 function openPitMenu(){
   const p=R.player,fpl=fplOf(R,p),left=lapsLeft(R,p),auto=Math.round(clamp(left*fpl*1.08+2-p.fuel,0,TANK-p.fuel)),max=Math.floor(TANK-p.fuel);
   if(p.fuelPlan==null)ui.pitFuel=auto;else ui.pitFuel=Math.min(max,Math.round(p.fuelPlan));
@@ -1352,19 +1360,17 @@ function openPitMenu(){
    <div class="tcards">${['S','M','H','I','W'].map(card).join('')}</div>
    <div class="sec"><h3>${icon('fuel',18)} Gasolina a cargar</h3><div class="sl"><input type="range" id="pitFuel" min="0" max="${max}" step="1" value="${ui.pitFuel}" style="flex:1"><span class="v" id="pitFuelV"></span></div>
     <div class="hint">Para terminar te harían falta ~${auto} L. Cada litro suma tiempo de parada.</div></div>
-   ${p.dWing>0.15?`<div class="sec"><h3>${icon('gear',18)} Morro dañado (${Math.round(p.dWing*100)} %)</h3><label style="display:flex;gap:10px;align-items:center;font-size:15px;cursor:pointer"><input type="checkbox" id="pitNose" ${p.fixNose===false?'':'checked'} style="width:22px;height:22px"> Cambiar el morro (+4 s)</label><div class="hint">Sin cambiarlo, el coche sigue subvirando y es más lento en curva.</div></div>`:''}
-    ${(p.dSusp>0.25||p.dRear>0.3||p.issue)?`<div class="hint" style="color:#ffb36b">${[p.dSusp>0.25?'suspensión':'',p.dRear>0.3?'parte trasera':'',p.issue==='oil'?'motor':p.issue==='brakes'?'frenos':''].filter(Boolean).join(', ')}: no se puede reparar en boxes.</div>`:''}
+   ${repairHtml(p)}
     <div class="pitTime" id="pitTime"></div>
    <button class="go" id="pitOk">${p.pitReq?'Actualizar parada':'Confirmar box esta vuelta'}</button>
    <div class="row2">${p.pitReq?'<button class="btn2" id="pitCancel">Cancelar box</button>':''}<button class="btn2" id="pitBack">Seguir sin parar</button></div>`;
   const upd=()=>{const L=+$('pitFuel').value;ui.pitFuel=L;$('pitFuelV').textContent=L+' L → '+((p.fuel+L)/fpl).toFixed(1)+' vueltas';
-    const nose=p.dWing>0.15&&(!$('pitNose')||$('pitNose').checked);
-    const st=2.2+2.4+L*0.06+(nose?4:0)+(p.wheelOff!=null?8:0);
-    $('pitTime').innerHTML=`Parada estimada <b>${st.toFixed(1)} s</b>${nose?' · cambio de morro':''}${p.wheelOff!=null?' · rueda nueva':''}`;};
-  $('pitFuel').oninput=upd;if($('pitNose'))$('pitNose').onchange=upd;upd();
+    const sel=[...document.querySelectorAll('#pitBody .rpk')].filter(x=>x.checked).map(x=>x.dataset.k);const sv=[p.repSel,p.fuelAdd];p.repSel=sel;p.fuelAdd=L;const st=serviceTimeT(p);p.repSel=sv[0];p.fuelAdd=sv[1];
+    $('pitTime').innerHTML=`Parada estimada <b>${st.toFixed(1)} s</b>${sel.length?' · reparar: '+sel.map(k=>REPAIRS.find(q=>q.k===k).n.toLowerCase()).join(', '):''}${p.wheelOff!=null?' · rueda nueva':''}`;};
+  $('pitFuel').oninput=upd;document.querySelectorAll('#pitBody .rpk').forEach(x=>x.onchange=upd);upd();
   document.querySelectorAll('#pitBody .tcard').forEach(b=>b.onclick=()=>{ui.pitComp=b.dataset.pc;document.querySelectorAll('#pitBody .tcard').forEach(x=>x.classList.toggle('sel',x===b));});
   const close=()=>{ui.pitMenu=false;$('pitmenu').classList.add('hidden');paused=false;};
-  $('pitOk').onclick=()=>{const was=p.pitReq;p.pitReq=true;p.nextCompound=ui.pitComp;p.fuelPlan=ui.pitFuel;p.fixNose=$('pitNose')?$('pitNose').checked:null;close();
+  $('pitOk').onclick=()=>{const was=p.pitReq;p.pitReq=true;p.nextCompound=ui.pitComp;p.fuelPlan=ui.pitFuel;p.repSel=[...document.querySelectorAll('#pitBody .rpk')].filter(x=>x.checked).map(x=>x.dataset.k);p.fixNose=null;close();
     flash('BOX, BOX',COMPOUNDS[p.nextCompound].name+' · +'+ui.pitFuel+' L',1.4);radioSay((was?'Cambiamos el plan: ':'Box, box. Confirmado, preparamos ')+COMPOUNDS[p.nextCompound].name.toLowerCase()+(ui.pitFuel>0?' y '+ui.pitFuel+' litros':'')+'.','box',3,true);};
   if($('pitCancel'))$('pitCancel').onclick=()=>{p.pitReq=false;p.fuelPlan=null;close();flash('Box cancelado','',1.2);radioSay('Recibido, seguimos fuera.','box',3,true);};
   $('pitBack').onclick=close;

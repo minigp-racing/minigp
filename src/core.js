@@ -15,7 +15,7 @@ function gripLat(c,v,R){ // aceleración lateral máxima (px/s²)
   const wf=0.75+0.5*(c.wing==null?0.5:c.wing),S=SURF[c.surf];
   const cf=c.cf||{aero:1,mech:1};
   const aero=AERO*cf.aero*wf*Math.min(1.2,(v/VMAX)*(v/VMAX))*(paved(c.surf)?1:0.3)/(1+0.14*c.fuel/TANK);
-  return G*(MECH*cf.mech*S.grip*trackGrip(R,c)+aero)*tyreGrip(c)*(1-0.15*c.dWing)*(1-0.12*c.dSusp)*(c.punct&&c.wheelOff==null?0.55:1)*(c.ooc>R.t?0.5:1)*(c.wrecked&&!c.cleared?0.12:1)*(WGRIP&&c.isPlayer&&!c.bot&&paved(c.surf)?1-WGRIP*Math.min(1,(c.wet||0)*1.6):1); /* v65: el agua en el asfalto también resta agarre (solo jugador; los bots ya tienen su ritmo de mojado medido) */
+  return G*(MECH*cf.mech*S.grip*trackGrip(R,c)+aero*(1-0.55*(c.dFloor||0)))*tyreGrip(c)*(1-0.15*c.dWing)*(1-0.12*c.dSusp)*(c.punct&&c.wheelOff==null?0.55:1)*(c.ooc>R.t?0.5:1)*(c.wrecked&&!c.cleared?0.12:1)*(WGRIP&&c.isPlayer&&!c.bot&&paved(c.surf)?1-WGRIP*Math.min(1,(c.wet||0)*1.6):1); /* v65: el agua en el asfalto también resta agarre (solo jugador; los bots ya tienen su ritmo de mojado medido) */
 }
 // v45: temperatura (c.bT, °C) y desgaste (c.bW, 0-1) de los frenos de carbono.
 // Fríos (<250 °C) muerden menos; muy calientes (>950 °C) pierden eficacia; gastados, algo menos de frenada.
@@ -437,7 +437,7 @@ function makeCar(tr,e,idx,lat,compound,fuel,autopilot){
     x:tr.xs[idx]+tr.nx[idx]*lat,y:tr.ys[idx]+tr.ny[idx]*lat,a:tr.ang[idx],vx:0,vy:0,av:0,idx,lat,
     steer:0,throttle:0,brake:0,surf:'asphalt',skid:0,
     compound,nextCompound:compound,wear:0,fuel,fuelAtLap:fuel,wearAtLap:0,fuelPerLap:null,wearPerLap:null,
-    pit:null,pitReq:false,pitT:0,fuelAdd:0,stops:0,pittedThisLap:false,wing:null,wet:0,dWing:0,dSusp:0,dRear:0,punct:false,suspSide:1,failAt:null,engineDead:false,eng:1,emode:1,dirty:0,issue:null,brakeFade:0,bT:260,bW:0,dnfReason:'',
+    pit:null,pitReq:false,pitT:0,fuelAdd:0,stops:0,pittedThisLap:false,wing:null,wet:0,dWing:0,dSusp:0,dRear:0,dFloor:0,dRad:0,dGear:0,punct:false,suspSide:1,failAt:null,engineDead:false,eng:1,emode:1,dirty:0,issue:null,brakeFade:0,bT:260,bW:0,dnfReason:'',
     baseOff:(Math.random()-0.5)*36,offset:lat,stuckT:0,recover:0,recSteer:0,
     lap:0,maxLap:0,lapStart:0,lastLap:null,bestLap:null,lapTimes:[],finished:false,finishTime:null,dnf:false,prog:idx,off:false};
 }
@@ -771,7 +771,27 @@ function botControl(R,c,dt){
 }
 
 // v45: en boxes solo se cambia el morro (opcional, +4 s) y, si se perdió una rueda, se monta otra (+8 s). Suspensión, alerón trasero y motor NO se reparan.
-function serviceTime(c){return 2.2+2.4+c.fuelAdd*0.06+(c.dWing>0.15&&c.fixNose!==false?4:0)+(c.wheelOff!=null?8:0)}
+/* ---------- v72: reparaciones en boxes (como en Le Mans) ----------
+   Cada pieza: segundos base (con el daño al 100 %), pérdida por vuelta si no se arregla (fracción de la vuelta por unidad de daño) y riesgo.
+   La pericia de los mecánicos (c.mech 0-1: modo carrera = nivel del jefe de mecánicos; si no, la del equipo) acorta el tiempo y hace que salga bien a la primera. */
+/* pérdida por vuelta medida con un bot solo (scratchpad dmgpace.js, daño 0,7 en Montmeló y Monza): morro +10-16 %, trasera +2-3 %, suelo +1,4-2,3 %, suspensión +2-3 %, radiador ~0 (su riesgo es el motor), caja +2-4 % */
+const REPAIRS=[{k:'dWing',n:'Morro',t:6,loss:0.18},{k:'dRear',n:'Alerón trasero',t:25,loss:0.035},{k:'dFloor',n:'Suelo',t:40,loss:0.027},{k:'dSusp',n:'Suspensión',t:75,loss:0.035},{k:'dRad',n:'Radiador',t:45,loss:0.005,risk:1},{k:'dGear',n:'Caja de cambios',t:60,loss:0.045,risk:1}];
+function mechOf(c){if(c.mech!=null)return c.mech;if(c.pitMul&&c.pitMul!==1)return clamp((1.12-c.pitMul)/0.3,0,1);return c.cf&&c.cf.rel!=null&&c.cf.rel!==0.6?clamp(c.cf.rel,0,1):0.3+0.5*(((c.team||0)*0.618034+0.21)%1);}
+function repairTime(c,P){const d=P.k==='dRear'&&c.rwOff?1:(c[P.k]||0);return P.t*(0.6+0.4*d)*(1.25-0.5*mechOf(c));}
+function repairList(c){return REPAIRS.filter(P=>(c[P.k]||0)>0.15||(P.k==='dRear'&&c.rwOff));}
+/* lo que se gana reparando cada pieza con las vueltas que quedan (radiador y caja: también el riesgo de romper) */
+function repairPlan(R,c){const left=Math.max(0,(R.laps||0)-(c.lap||0)),lapT=(R.est&&R.est.lap)||90,out=[];let gain=0;
+  for(const P of repairList(c)){const d=P.k==='dRear'&&c.rwOff?1:c[P.k];let loss=left*lapT*P.loss*d;if(P.risk&&d>0.5)loss+=left*lapT*0.25*(d-0.5);const t=repairTime(c,P),g=loss-t;out.push({k:P.k,n:P.n,t,g,d});if(g>0)gain+=g;}
+  return {list:out,gain};}
+function serviceTime(c){let rt=0;const sel=c.repSel;for(const P of REPAIRS){const want=sel?sel.includes(P.k):(P.k==='dWing'&&c.dWing>0.15&&c.fixNose!==false);if(want&&((c[P.k]||0)>0.15||(P.k==='dRear'&&c.rwOff)))rt+=repairTime(c,P);}
+  return 2.2+2.4+c.fuelAdd*0.06+rt+(c.wheelOff!=null?8:0);}
+/* al acabar la parada: cada reparación sale bien (pieza como nueva) o a medias (queda un 35 %), según la pericia */
+function doRepairs(R,c){const sel=c.repSel||(c.dWing>0.15&&c.fixNose!==false?['dWing']:[]);const mk=mechOf(c),half=[];
+  for(const P of REPAIRS){if(!sel.includes(P.k))continue;const was=c[P.k]||0;if(was<=0.15&&!(P.k==='dRear'&&c.rwOff))continue;
+    if(Math.random()<0.62+0.33*mk){c[P.k]=0;if(P.k==='dRear')c.rwOff=false;}else{c[P.k]=was*0.35;if(P.k==='dRear')c.rwOff=false;half.push(P.n);}}
+  if(half.length&&R.fx&&c.isPlayer)R.events.push({type:'damage',car:c,msg:'Reparación a medias: '+half.join(', ').toLowerCase()});
+  c.repSel=null;c.fixNose=null;}
+function serviceTime0(c){return 2.2+2.4+c.fuelAdd*0.06+(c.dWing>0.15&&c.fixNose!==false?4:0)+(c.wheelOff!=null?8:0)}
 function serviceTimeT(c){return serviceTime(c)*(c.pitMul||1);}
 /* v53: paradas que salen mal (~7 % de las paradas; con mejores mecánicos en el modo carrera, menos):
    tuerca atascada (+3-9 s), gato que falla (+2-4 s), manguera de gasolina que no engancha (+2-6 s),
@@ -808,7 +828,7 @@ function pitControl(R,c,dt){
     if(c.pitT<=0&&R.liveQ){c.qLaps=0;if(c.bot){const w=R.meanWet||0;c.nextCompound=w>0.62?'W':w>0.2?'I':'S';}}
     /* v70: suelta segura (bots): el mecánico no suelta el coche si viene otro por el carril del pit lane justo detrás (antes salían todos a la vez y se juntaban en la primera curva) */
     if(c.pitT<=0&&c.bot&&!R.liveQ){const bd0=boxD(c.slot);for(const o of R.cars){if(o===c||(o.pit!=='in'&&o.pit!=='out'))continue;const od=dOf(tr,o.idx),dd=bd0-od;if(dd>-3&&dd<16){c.pitT=0.05;break;}}}
-    if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?58:80; /* v54: mantas térmicas (antes salían a 50/68 °C, −7 % de agarre: el undercut casi nunca salía) */c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;if(c.dWing>0.15&&c.fixNose!==false)c.dWing=0;c.fixNose=null;if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.lastStopLap=c.lap;c.pittedThisLap=true;c.pit='out';
+    if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?58:80; /* v54: mantas térmicas (antes salían a 50/68 °C, −7 % de agarre: el undercut casi nunca salía) */c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;doRepairs(R,c);if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.lastStopLap=c.lap;c.pittedThisLap=true;c.pit='out';
       // v45: las averías (aceite, frenos) ya no se arreglan en boxes: solo el morro
       if(c.looseW!=null){c.looseAt=R.t+3+Math.random()*9;}
       if(R.fx)R.events.push({type:'pitdone',car:c});}
@@ -857,7 +877,7 @@ function pitControl(R,c,dt){
   if(PITHIT)for(const o of R.cars){if(o===c||!o.pit||o.pit==='service'||o.gone||o.dnf)continue;const dd=((o.idx-c.idx)%N+N)%N;if(dd>0&&dd<9&&Math.abs(o.lat-c.lat)<CARW+4){const ov=Math.max(0,o.vx*tr.tx[o.idx]+o.vy*tr.ty[o.idx]);target=Math.min(target,Math.max(0,ov+(dd*tr.sp-2*HL-10)*1.5));}}
   speedCtl(c,vf,target);
 }
-function startService(R,c,vf){{c.pit='service';c.pitLineX=false;c.pitErr=null;const wasRain=c.rainCall;c.rainCall=false;if(c.bot&&R.mode==='race'&&!wasRain){c.nextCompound=compoundFor(R,c,c.nextCompound);} /* v61: si paró por el tiempo, monta la goma que se decidió al llamarle (antes se recalculaba y a veces volvía a montar la misma) */ /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitFail=null;if(R.mode==='race'&&!R.liveQ)pitMishap(R,c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
+function startService(R,c,vf){{c.pit='service';c.pitLineX=false;c.pitErr=null;const wasRain=c.rainCall;c.rainCall=false;if(c.bot&&R.mode==='race'&&!wasRain){c.nextCompound=compoundFor(R,c,c.nextCompound);} /* v61: si paró por el tiempo, monta la goma que se decidió al llamarle (antes se recalculaba y a veces volvía a montar la misma) */ /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);if(R.mode==='race'&&!R.liveQ&&(c.bot||c.repSel==null)){const pl=repairPlan(R,c);c.repSel=pl.list.filter(q=>q.g>0||(q.k==='dWing'&&(c.bot?q.d>0.5:c.fixNose!==false))).map(q=>q.k);} /* el jugador que para sin abrir el menú: el equipo arregla lo que compensa */c.pitT=serviceTimeT(c)*(c.repSel&&c.repSel.length?1+Math.random()*0.35*(1-mechOf(c)):1); /* v72: una reparación puede alargarse (menos con buenos mecánicos) */c.pitFail=null;if(R.mode==='race'&&!R.liveQ)pitMishap(R,c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
       if(R.liveQ){c.fuelAdd=0;c.pitReq=false;c.qFly=false;const L=R.liveQ,nx=c.qRuns?c.qRuns[++c.qRun]:null;c.pitT=(!c.bot||L.flag||c.qDone||nx==null)?1e9:Math.max(3,nx-L.t);c.pitTotal=c.pitT;}
       if(R.fx)R.events.push({type:'pitstop',car:c});}
 }
@@ -937,6 +957,8 @@ function physicsSim(R,c,dt){
     if(vf>=-1){drive=thr*Math.min(pl?3.2*G:TRAC*G*(1.12-0.24*c.gearS)*Math.min(1,tyreGrip(c)*S.grip*1.15),P/Math.max(v,40))/massF;if(vf>vTop)drive=0;}
     else{revStop=true;ax+=0.8*brakeMax(c,v)*thr;} // yendo marcha atrás, acelerar frena hasta parar
   }
+  if(c.dGear>0.3&&thr>0.5&&v>60&&!(c.gearCut>R.t)&&Math.random()<dt*0.6*c.dGear)c.gearCut=R.t+0.1+0.25*c.dGear; /* v72: caja tocada: cambios que no entran */
+  if(c.dGear>0)drive*=(1-0.06*c.dGear)*(c.gearCut>R.t?0.15:1);
   if(c.launchUntil&&R.t<c.launchUntil)drive*=c.launchMul;if(c.stallUntil&&R.t<c.stallUntil)drive=0;
   if(c.kersOn){c.kers=Math.max(0,c.kers-dt);if(c.kers<=0)c.kersOn=false;}
   let braking=false;
@@ -1049,7 +1071,7 @@ function physicsSim(R,c,dt){
   {const ay=clamp(vf*c.r/G,-5,5);c.roll=(c.roll||0)+(ay-(c.roll||0))*Math.min(1,dt/0.17);c.rollLag=Math.abs(ay-c.roll);} // balanceo (en G), con ~0,17 s de retraso
   tyreHeat(R,c,v,Math.hypot(ax,vf*c.r)/G,dt,ax,vf*c.r);
   // temperatura del motor: sube con gas y aire caliente del de delante; baja con la velocidad
-  c.temp=(c.temp||90)+(0.45*thr*(1+0.6*c.slip)*EM.heat+0.55*c.dirty*thr-0.012*((c.temp||90)-75-(R.temps?0.5*(R.temps.air-24):0))*(0.4+v/VMAX)*(1-0.45*c.dirty))*dt; /* v71: con aire caliente el motor se calienta más */
+  c.temp=(c.temp||90)+(0.45*thr*(1+0.6*c.slip)*EM.heat*(1+1.6*(c.dRad||0))+0.55*c.dirty*thr-0.012*((c.temp||90)-75-(R.temps?0.5*(R.temps.air-24):0))*(0.4+v/VMAX)*(1-0.45*c.dirty))*dt; /* v71: con aire caliente el motor se calienta más */
   if(R.mult){
     const C=COMPOUNDS[c.compound];
     const dryPen=C.wet?1+(c.compound==='W'?2.2:1.5)*Math.max(0,0.2-(c.wet||0))/0.2:1;
@@ -1125,7 +1147,10 @@ function hurt(R,c,power,lx,ly,ix,iy){
   else if(lx<-12){if(power>70){c.dRear=Math.min(1,c.dRear+(power-70)/380);hit=true;
     // v44: con la trasera muy tocada, el alerón trasero sale volando
     if(c.dRear>0.7&&!c.rwOff){c.rwOff=true;addDebris(R,c,'rwing',-17,0,c.vx*0.6+(ix||0)*power*0.2,c.vy*0.6+(iy||0)*power*0.2,110);for(let k=0;k<4;k++)addDebris(R,c,'shard',-17,0,c.vx*0.5,c.vy*0.5,130);}}}
-  else if(power>80){c.dSusp=Math.min(1,c.dSusp+(power-80)/360);c.suspSide=ly>0?1:-1;hit=true;}
+  else if(power>80){c.dSusp=Math.min(1,c.dSusp+(power-80)/360);c.suspSide=ly>0?1:-1;hit=true;if(power>100)c.dRad=Math.min(1,(c.dRad||0)+(power-100)/520);}
+  /* v72: la caja sufre con los golpes atrás y el suelo con cualquier golpe fuerte */
+  if(lx<-12&&power>90)c.dGear=Math.min(1,(c.dGear||0)+(power-90)/560);
+  if(power>140)c.dFloor=Math.min(1,(c.dFloor||0)+(power-140)/620);
   // v44: rueda arrancada. Un golpe lateral fuerte sobre una suspensión ya muy tocada (o uno brutal) suelta la rueda de ese lado
   let wheelMsg=null;
   if(c.wheelOff==null&&power>180&&Math.abs(ly)>3&&(c.dSusp>0.8||power>290)&&Math.random()<0.45+(power-180)/400){
@@ -1148,7 +1173,7 @@ function hurt(R,c,power,lx,ly,ix,iy){
   else if(power>220&&Math.random()<0.5){looseParts(R,c,lx);}
   else if(power>130)shedBits(R,c,power,lx);
   if(R.fx&&(msg||(hit&&sev>0.15)))R.events.push({type:'damage',car:c,msg:msg||(lx>10?'Alerón dañado':lx<-12?'Golpe atrás':'Suspensión tocada')});
-  if(c.bot&&R.mode==='race'&&!c.finished&&(c.punct||c.dWing>0.4||c.wheelOff!=null))c.pitReq=true; // v45: solo para lo que se arregla (morro, rueda)
+  if(c.bot&&R.mode==='race'&&!c.finished&&(c.punct||c.dWing>0.5||c.wheelOff!=null||repairPlan(R,c).gain>22))c.pitReq=true; /* v72: también si reparar le compensa con las vueltas que quedan */
 }
 function rainWant(mw,cur){
   const wet=COMPOUNDS[cur].wet;
@@ -1469,7 +1494,7 @@ function redFlagRestart(R){const tr=R.tr,N=tr.N;R.red=null;R.redDone=true;R.sc=n
     const g=gridSlot(tr,k++),i=g.idx;c.x=tr.xs[i]+tr.nx[i]*g.lat;c.y=tr.ys[i]+tr.ny[i]*g.lat;c.a=tr.ang[i];c.vx=c.vy=0;c.r=0;c.av=0;c.yaw=0;c.idx=i;c.lat=g.lat;
     c.steer=0;c.throttle=0;c.brake=0;c.ooc=0;c.recover=0;c.kersOn=false;c.lrpm=4500;
     if(full)c.lap=0;c.maxLap=c.lap;c.prog=c.lap*N+i;c.lapStart=R.t;c.redSkip=!full;
-    c.dWing=0;c.dRear=0;c.dSusp=0;c.punct=false;c.wheelOff=null;c.rwOff=false;c.wheelDnfAt=null;c.looseAt=null;c.looseW=null;c.grain=0;
+    c.dWing=0;c.dRear=0;c.dSusp=0;c.dFloor=0;c.dRad=0;c.dGear=0;c.punct=false;c.wheelOff=null;c.rwOff=false;c.wheelDnfAt=null;c.looseAt=null;c.looseW=null;c.grain=0;
     const dry=COMPOUNDS[c.compound].wet?chooseCompound(Math.max(1,lapsLeft(R,c)),R.est,Math.random()):c.compound;
     c.compound=R.weather&&R.weather.type!=='dry'?compoundFor(R,c,dry):c.compound;c.wear=0;c.tws=[0,0,0,0];c.tt=COMPOUNDS[c.compound].win[0]+4;c.tts=[c.tt,c.tt,c.tt,c.tt];
     c.pit=null;c.pitReq=false;c.rainCall=false;c.fuelCall=false;c.pittedThisLap=true;c.fuelAtLap=c.fuel;c.wearAtLap=0;c.unlap=false;c.blueT=0;c.yieldTo=null;}
@@ -1626,12 +1651,15 @@ function stepRace(R,dt){
       else if(c.pitReq&&d>=-PITL+8&&d<0&&!c.pitMiss){c.pitMiss=true;if(R.fx)R.events.push({type:'pitmiss',car:c});}
       if(d>0){c.pitMiss=false;c.pcWarn=false;}}
     engineStep(R,c,dt);
+    if(c.isPlayer&&!c.bot&&R.fx){c.dmgSaid=c.dmgSaid||{};for(const [k,m] of [['dFloor','Tenemos el suelo dañado: menos carga en curva.'],['dRad','Radiador tocado: vigila la temperatura del motor.'],['dGear','La caja de cambios está tocada: los cambios no entran bien.']]){if((c[k]||0)>0.3&&!c.dmgSaid[k]){c.dmgSaid[k]=1;R.events.push({type:'damage',car:c,msg:m});}if((c[k]||0)<0.1)c.dmgSaid[k]=0;}}
+    if(R.damage&&!c.pit&&(c.surf==='gravel'||c.surf==='grass')){const vv=Math.hypot(c.vx,c.vy);if(vv>230)c.dFloor=Math.min(1,(c.dFloor||0)+dt*0.004*(vv-230)/100*(c.surf==='gravel'?2:1));} /* v72: el suelo sufre fuera de pista */
+    if(c.dGear>0.85&&!c.engineDead&&!c.finished&&!c.pit&&c.failAt==null&&Math.random()<dt*0.012*(c.dGear-0.8)*10){c.failAt=R.t;c.failType='gearbox';} /* v72: caja rota */
     if(c.failAt!=null&&!c.engineDead&&!c.finished&&R.t>c.failAt&&c.isPlayer&&!c.bot){c.failAt=null; // al jugador se le avisa: puede salvarla
       c.issue=c.failType==='brakes'?'brakes':'oil';if(R.fx)R.events.push({type:'radioIssue',car:c,kind:c.issue});}
     if(c.failAt!=null&&!c.engineDead&&!c.finished&&R.t>c.failAt){c.failAt=null;
       if(c.failType==='brakes'){c.brakeFail=true;if(R.fx)R.events.push({type:'incident',car:c,kind:'brakes'});}
       else{c.engineDead=true;if(c.failType!=='hydraulics'&&Math.random()<0.35){c.fire=R.t+9+Math.random()*6;c.engFire=true;} /* v53: el motor revienta y arde */
-        if(R.fx)R.events.push({type:c.isPlayer?'damage':'incident',car:c,kind:c.failType||'engine',fire:!!c.engFire,msg:c.failType==='hydraulics'?'Fallo hidráulico':c.engFire?'¡Fuego en el motor!':'Avería de motor'});}}
+        if(R.fx)R.events.push({type:c.isPlayer?'damage':'incident',car:c,kind:c.failType||'engine',fire:!!c.engFire,msg:c.failType==='hydraulics'?'Fallo hidráulico':c.failType==='gearbox'?'Caja de cambios rota':c.engFire?'¡Fuego en el motor!':'Avería de motor'});}}
     if(c.engineDead&&!c.dnf&&Math.hypot(c.vx,c.vy)<10){c.dnf=true;c.dnfReason='Avería';scTrigger(R,c);}
     if(c.looseAt&&!c.pit&&R.t>c.looseAt&&!c.dnf&&c.wheelOff==null){const w=c.looseW;c.looseAt=null;c.looseW=null;c.wheelOff=w;c.punct=true;c.dSusp=Math.max(c.dSusp||0,0.6);c.suspSide=w%2?1:-1;
       const front=w<2,side=w%2?1:-1,wd=addDebris(R,c,'wheel',front?13:-11,side*6,c.vx*0.9+(-Math.sin(c.a))*side*60,c.vy*0.9+Math.cos(c.a)*side*60,90);wd.va=(Math.random()<0.5?-1:1)*12;
