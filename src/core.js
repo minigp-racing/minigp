@@ -430,6 +430,8 @@ function rosterFromTeams(teams,nCars,diff){
 }
 function makeRoster(diff){return rosterFromTeams(DEFAULT_TEAMS,8,diff);}
 
+/* v76: tripulación (resistencia): el piloto de la entrada y su compañero de equipo (e.co); c.drv = quién conduce */
+function crewOf(e){return e.co?[{name:e.name,skill:e.skill,tr:e.tr,isPlayer:!!e.isPlayer,id:e.id},{name:e.co.name,skill:e.co.skill,tr:e.co.tr,isPlayer:false,id:e.co.id}]:null;}
 function makeCar(tr,e,idx,lat,compound,fuel,autopilot){
   const cf=e.car?{pwr:0.9+0.16*e.car.eng,aero:0.84+0.26*e.car.aero,mech:0.92+0.13*e.car.chas,rel:e.car.rel}:{pwr:1,aero:1,mech:1,rel:0.6}; // más diferencia entre coches buenos y malos
   return {cf,traits:e.tr||{agr:0.5,def:0.5,reg:0.5,bru:0.3},temp:90,tt:80,r:0,latG:0,lonG:0,brakeS:0.5,gearS:0.5,tcS:0.6,kers:4,kersOn:false,drsOpen:false,drsOk:false,slip:0,pen:0,warns:0,offT:0,pace:1,
@@ -481,6 +483,8 @@ function makeSession(cfg){
   const tr=buildTrack(cfg.track),cars=[];
   const R={mode:cfg.mode,steerMode:cfg.steerMode||'sim',aids:cfg.aids!==false,noSC:!!cfg.noSC,formation:!!cfg.formation,sets:cfg.sets?Object.assign({},cfg.sets):null,inc:cfg.incidents==null?1:cfg.incidents,yellow:[],damage:cfg.damage!==false,tr,cars,laps:cfg.laps,mult:cfg.mult,est:cfg.est,t:0,phase:'countdown',cd:0,lightsOut:5.3+Math.random()*1.2,
     input:{up:0,down:0,left:0,right:0},drsManual:!!cfg.drsManual,standings:null,fx:!!cfg.fx,skids:null,events:[]};
+  R.autopilot=!!cfg.autopilot;R.timed=cfg.mode==='race'&&cfg.timed>0?cfg.timed:0; /* v76: resistencia: segundos de carrera; las vueltas se van estimando */
+  if(R.timed)R.laps=Math.max(2,Math.ceil(R.timed/((cfg.est&&cfg.est.lap)||90))+1);
   if(cfg.fx){R.skids={buf:new Float32Array(6000*4),n:0,head:0};}
   R.weather=makeWeather(tr,cfg.weather||'dry',cfg.weatherSeed||Math.floor(Math.random()*1e9));R.tempSeed=cfg.weatherSeed||Math.floor(Math.random()*1e9);R.water=new Float32Array(tr.N);R.meanWet=0;R.dry=new Float32Array(tr.N);R.lineLat=new Float32Array(tr.N);
   if(cfg.weather==='rain'){R.weather.t=0;for(let k=0;k<200;k++)stepWeather(R,0.2);R.weather.t=0;}
@@ -497,7 +501,7 @@ function makeSession(cfg){
       if(e.isPlayer&&!cfg.autopilot){comp=cfg.playerCompound;fuel=typeof cfg.playerFuel==='number'?Math.min(TANK,Math.max(2,cfg.playerFuel)):cfg.playerFuel==='half'?fuelFor(Math.ceil(cfg.laps/2),cfg.est):fuelFor(cfg.laps,cfg.est);}
       else{const full=fuelFor(cfg.laps,cfg.est);const half=Math.random()<0.5&&cfg.laps>=10;/* v45: medio depósito solo en carreras largas (en 5 vueltas obligaba a una parada absurda) */fuel=half?fuelFor(Math.ceil(cfg.laps/2),cfg.est):full;
         const stint=Math.min(cfg.laps,Math.floor(Math.min(fuel,TANK)/cfg.est.fuel));comp=chooseCompound(stint,cfg.est,Math.random());}
-      const car=makeCar(tr,e,g.idx,g.lat,comp,Math.min(TANK,fuel),cfg.autopilot);car.l1lane=(g.lat>0?1:-1)*L1LANE;cars.push(car);
+      const car=makeCar(tr,e,g.idx,g.lat,comp,Math.min(TANK,fuel),cfg.autopilot);car.l1lane=(g.lat>0?1:-1)*L1LANE;if(R.timed&&e.co){car.crew=crewOf(e);car.drv=0;car.stintT=0;}cars.push(car);
     });
     /* v50: neumáticos con historia: los que pasaron a la Q3 salen con el juego de su mejor vuelta de la Q2 (si la salida es en seco) */
     const qT=cfg.qTyre||{};for(const c of cars){const q=qT[c.id];if(!q||COMPOUNDS[q.comp].wet||cfg.weather==='rain')continue;c.compound=q.comp;c.tws=q.tws.slice();c.wear=Math.max(...c.tws);c.qUsed=true;if(c.isPlayer&&!c.bot&&R.sets&&R.sets[q.comp]>0)R.sets[q.comp]--;}
@@ -792,7 +796,17 @@ function doRepairs(R,c){const sel=c.repSel||(c.dWing>0.15&&c.fixNose!==false?['d
   if(half.length&&R.fx&&c.isPlayer)R.events.push({type:'damage',car:c,msg:'Reparación a medias: '+half.join(', ').toLowerCase()});
   c.repSel=null;c.fixNose=null;}
 function serviceTime0(c){return 2.2+2.4+c.fuelAdd*0.06+(c.dWing>0.15&&c.fixNose!==false?4:0)+(c.wheelOff!=null?8:0)}
-function serviceTimeT(c){return serviceTime(c)*(c.pitMul||1);}
+function serviceTimeT(c){return serviceTime(c)*(c.pitMul||1)+(c.swapNow?DRVCHG:0);}
+/* ---------- v76: relevos ----------
+   Cada turno tiene un máximo (STINT: 35 % de la carrera, entre 6 y 30 min). Los bots cambian de piloto en la parada si su turno supera la mitad del máximo.
+   El coche del jugador: con tu compañero al volante es un bot (su nivel y carácter); vuelves a conducir en la siguiente parada si lo pides (c.swapReq) o si se le acaba el turno. */
+const DRVCHG=7;
+function stintMax(R){return clamp(R.timed*0.35,360,1800);}
+function setDriver(R,c,k){const d=c.crew[k];c.drv=k;c.name=d.name;c.skill=d.skill;if(d.tr)c.traits=d.tr;c.stintT=0;
+  if(c.isPlayer&&!R.autopilot){c.bot=!d.isPlayer;if(c.bot){c.pitReq=false;c.swapReq=false;}}
+  if(R.fx)R.events.push({type:'driverChange',car:c,name:d.name,player:c.isPlayer});}
+function wantSwap(R,c){if(!c.crew)return false;const M=stintMax(R),left=R.timed?Math.max(0,R.timed-R.t):1e9;if(left<120)return false; /* al final no se cambia */
+  if(c.isPlayer)return !!c.swapReq||c.stintT>M||(c.bot&&c.stintT>M*0.5);return c.stintT>M*0.5;}
 /* v53: paradas que salen mal (~7 % de las paradas; con mejores mecánicos en el modo carrera, menos):
    tuerca atascada (+3-9 s), gato que falla (+2-4 s), manguera de gasolina que no engancha (+2-6 s),
    salida insegura (+5 s de sanción) o rueda mal apretada que se suelta al poco de salir */
@@ -828,7 +842,7 @@ function pitControl(R,c,dt){
     if(c.pitT<=0&&R.liveQ){c.qLaps=0;if(c.bot){const w=R.meanWet||0;c.nextCompound=w>0.62?'W':w>0.2?'I':'S';}}
     /* v70: suelta segura (bots): el mecánico no suelta el coche si viene otro por el carril del pit lane justo detrás (antes salían todos a la vez y se juntaban en la primera curva) */
     if(c.pitT<=0&&c.bot&&!R.liveQ){const bd0=boxD(c.slot);for(const o of R.cars){if(o===c||(o.pit!=='in'&&o.pit!=='out'))continue;const od=dOf(tr,o.idx),dd=bd0-od;if(dd>-3&&dd<16){c.pitT=0.05;break;}}}
-    if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?58:80; /* v54: mantas térmicas (antes salían a 50/68 °C, −7 % de agarre: el undercut casi nunca salía) */c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;doRepairs(R,c);if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.lastStopLap=c.lap;c.pittedThisLap=true;c.pit='out';
+    if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?58:80; /* v54: mantas térmicas (antes salían a 50/68 °C, −7 % de agarre: el undercut casi nunca salía) */c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;doRepairs(R,c);if(c.swapNow&&c.crew){c.swapNow=false;setDriver(R,c,1-c.drv);}if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.lastStopLap=c.lap;c.pittedThisLap=true;c.pit='out';
       // v45: las averías (aceite, frenos) ya no se arreglan en boxes: solo el morro
       if(c.looseW!=null){c.looseAt=R.t+3+Math.random()*9;}
       if(R.fx)R.events.push({type:'pitdone',car:c});}
@@ -877,7 +891,7 @@ function pitControl(R,c,dt){
   if(PITHIT)for(const o of R.cars){if(o===c||!o.pit||o.pit==='service'||o.gone||o.dnf)continue;const dd=((o.idx-c.idx)%N+N)%N;if(dd>0&&dd<9&&Math.abs(o.lat-c.lat)<CARW+4){const ov=Math.max(0,o.vx*tr.tx[o.idx]+o.vy*tr.ty[o.idx]);target=Math.min(target,Math.max(0,ov+(dd*tr.sp-2*HL-10)*1.5));}}
   speedCtl(c,vf,target);
 }
-function startService(R,c,vf){{c.pit='service';c.pitLineX=false;c.pitErr=null;const wasRain=c.rainCall;c.rainCall=false;if(c.bot&&R.mode==='race'&&!wasRain){c.nextCompound=compoundFor(R,c,c.nextCompound);} /* v61: si paró por el tiempo, monta la goma que se decidió al llamarle (antes se recalculaba y a veces volvía a montar la misma) */ /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);if(R.mode==='race'&&!R.liveQ&&(c.bot||c.repSel==null)){const pl=repairPlan(R,c);c.repSel=pl.list.filter(q=>q.g>0||(q.k==='dWing'&&(c.bot?q.d>0.5:c.fixNose!==false))).map(q=>q.k);} /* el jugador que para sin abrir el menú: el equipo arregla lo que compensa */c.pitT=serviceTimeT(c)*(c.repSel&&c.repSel.length?1+Math.random()*0.35*(1-mechOf(c)):1); /* v72: una reparación puede alargarse (menos con buenos mecánicos) */c.pitFail=null;if(R.mode==='race'&&!R.liveQ)pitMishap(R,c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
+function startService(R,c,vf){{c.pit='service';c.pitLineX=false;c.pitErr=null;const wasRain=c.rainCall;c.rainCall=false;if(c.bot&&R.mode==='race'&&!wasRain){c.nextCompound=compoundFor(R,c,c.nextCompound);} /* v61: si paró por el tiempo, monta la goma que se decidió al llamarle (antes se recalculaba y a veces volvía a montar la misma) */ /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.swapNow=R.timed&&c.crew?wantSwap(R,c):false;c.fuelAdd=planFuel(R,c);if(R.mode==='race'&&!R.liveQ&&(c.bot||c.repSel==null)){const pl=repairPlan(R,c);c.repSel=pl.list.filter(q=>q.g>0||(q.k==='dWing'&&(c.bot?q.d>0.5:c.fixNose!==false))).map(q=>q.k);} /* el jugador que para sin abrir el menú: el equipo arregla lo que compensa */c.pitT=serviceTimeT(c)*(c.repSel&&c.repSel.length?1+Math.random()*0.35*(1-mechOf(c)):1); /* v72: una reparación puede alargarse (menos con buenos mecánicos) */c.pitFail=null;if(R.mode==='race'&&!R.liveQ)pitMishap(R,c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
       if(R.liveQ){c.fuelAdd=0;c.pitReq=false;c.qFly=false;const L=R.liveQ,nx=c.qRuns?c.qRuns[++c.qRun]:null;c.pitT=(!c.bot||L.flag||c.qDone||nx==null)?1e9:Math.max(3,nx-L.t);c.pitTotal=c.pitT;}
       if(R.fx)R.events.push({type:'pitstop',car:c});}
 }
@@ -1523,7 +1537,7 @@ function crossLine(R,c){
     c.pace=1+(Math.random()-0.5)*0.018*(1-(c.traits?c.traits.reg:0.5));
     // estilos. Irregular: vueltas muy rápidas y otras flojas. Metrónomo: siempre igual y, como no falla, un pelín más rápido.
     {const st=c.traits&&c.traits.style;if(st==='irregular')c.pace=Math.random()<0.25?1.012:1+(Math.random()-0.6)*0.04;else if(st==='metronomo')c.pace=1.002+(Math.random()-0.5)*0.003;}
-    if(c.lap>R.laps&&!c.finished){c.finished=true;c.finishTime=t+c.pen;c.pitReq=false;}
+    if((c.lap>R.laps||(R.timedEnd&&R.standings&&R.standings.some(o=>o.finished)))&&!c.finished){c.finished=true;c.finishTime=t+c.pen;c.finLap=c.lap;c.pitReq=false;} /* v76: con reloj, tras la bandera todos acaban al cruzar la meta */
     else if(c.bot&&!c.finished){botStrategy(R,c);rollMistake(R,c);}
   }
 }
@@ -1651,6 +1665,8 @@ function stepRace(R,dt){
       else if(c.pitReq&&d>=-PITL+8&&d<0&&!c.pitMiss){c.pitMiss=true;if(R.fx)R.events.push({type:'pitmiss',car:c});}
       if(d>0){c.pitMiss=false;c.pcWarn=false;}}
     engineStep(R,c,dt);
+    if(R.timed&&c.crew&&R.phase==='race'&&!c.pit&&!c.finished&&!c.dnf){c.stintT+=dt;const M=stintMax(R);
+      if(c.stintT>M&&!c.pitReq&&!(c.isPlayer&&!c.bot&&c.stintWarn>R.t-30)){c.pitReq=true;c.swapReq=c.isPlayer?true:c.swapReq;if(R.fx&&c.isPlayer&&!c.bot){c.stintWarn=R.t;R.events.push({type:'stintEnd',car:c});}}}
     if(c.isPlayer&&!c.bot&&R.fx){c.dmgSaid=c.dmgSaid||{};for(const [k,m] of [['dFloor','Tenemos el suelo dañado: menos carga en curva.'],['dRad','Radiador tocado: vigila la temperatura del motor.'],['dGear','La caja de cambios está tocada: los cambios no entran bien.']]){if((c[k]||0)>0.3&&!c.dmgSaid[k]){c.dmgSaid[k]=1;R.events.push({type:'damage',car:c,msg:m});}if((c[k]||0)<0.1)c.dmgSaid[k]=0;}}
     if(R.damage&&!c.pit&&(c.surf==='gravel'||c.surf==='grass')){const vv=Math.hypot(c.vx,c.vy);if(vv>230)c.dFloor=Math.min(1,(c.dFloor||0)+dt*0.004*(vv-230)/100*(c.surf==='gravel'?2:1));} /* v72: el suelo sufre fuera de pista */
     if(c.dGear>0.85&&!c.engineDead&&!c.finished&&!c.pit&&c.failAt==null&&Math.random()<dt*0.012*(c.dGear-0.8)*10){c.failAt=R.t;c.failType='gearbox';} /* v72: caja rota */
@@ -1703,9 +1719,12 @@ function stepRace(R,dt){
         if(!o||o.dnf||o.pit||o.prog>=p.prog+2){if(o&&o.prog>p.prog&&R.fx)R.events.push({type:'y_ok',car:p});if(o){o.reclaim=null;(Y.cool||(Y.cool={}))[o.id]=R.t+5;}Y.owe=null;}
         else if(R.t-Y.owe.t>10&&(Y.owe.yl||0)>3){if(R.fx)R.events.push({type:'y_forgive',car:p,who:Y.owe.who});o.reclaim=null;(Y.cool||(Y.cool={}))[o.id]=R.t+5;Y.owe=null;}
         else if(R.t-Y.owe.t>10){p.pen+=5;if(R.fx)R.events.push({type:'y_pen',car:p,who:Y.owe.who,sc:Y.owe.sc});o.reclaim=null;Y.owe=null;}}}}
+  /* v76: resistencia: las vueltas totales salen del tiempo que queda; al cumplirse el reloj, el líder acaba esa vuelta */
+  if(R.timed&&R.phase==='race'&&!R.timedEnd&&R.standings&&R.standings[0]){const L=R.standings[0],lt=L.lastLap||(R.est&&R.est.lap)||90;
+    if(R.t>=R.timed){R.timedEnd=true;R.laps=Math.max(1,L.lap);if(R.fx)R.events.push({type:'timeUp'});}else R.laps=Math.max(L.lap+1,L.lap+Math.ceil((R.timed-R.t)/lt));}
   R.standings=cars.slice().sort((a,b)=>{
     if(a.dnf!==b.dnf)return a.dnf?1:-1;
-    if(a.finished&&b.finished)return a.finishTime-b.finishTime;
+    if(a.finished&&b.finished)return R.timed&&(a.finLap||0)!==(b.finLap||0)?(b.finLap||0)-(a.finLap||0):a.finishTime-b.finishTime;
     if(a.finished)return -1;if(b.finished)return 1;return b.prog-a.prog;
   });
 }
