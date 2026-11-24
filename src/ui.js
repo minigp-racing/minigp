@@ -1115,7 +1115,7 @@ function startAttract(){
 }
 function showHud(v){$('hud').classList.toggle('hidden',!v);}
 
-function launch(cfg,btn){if(cfg.weather==='rand'){const u=Math.random();cfg.weather=u<0.5?'dry':u<0.85?'var':'rain';} /* v68: clima aleatorio también en carrera rápida (no se sabe hasta ver la previsión) */
+function launch(cfg,btn){SESS_TOD=settings.tod||'day';if(cfg.weather==='rand'){const u=Math.random();cfg.weather=u<0.5?'dry':u<0.85?'var':'rain';} /* v68: clima aleatorio también en carrera rápida (no se sabe hasta ver la previsión) */
   audioInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
   const txt=btn.innerHTML;btn.disabled=true;btn.innerHTML=btn.classList.contains('mi')?'<b>Preparando…</b>':'Preparando…';
   setTimeout(()=>{try{newEvent(cfg);}finally{btn.disabled=false;btn.innerHTML=txt;}},30);
@@ -3424,7 +3424,7 @@ function drawWeatherPanel(G){
   ctx.strokeStyle='rgba(143,208,255,.35)';ctx.lineWidth=1;for(const k of [0.33,0.66,1]){ctx.beginPath();ctx.arc(cx,cy,D/2*k,0,Math.PI*2);ctx.stroke();}
   // texto a la derecha
   const tx=x+D+22;ctx.fillStyle='#fff';ctx.font='700 13px system-ui,sans-serif';ctx.fillText(sky,tx,y+20);
-  ctx.font='600 12px system-ui,sans-serif';ctx.fillStyle='#9fc6ff';ctx.fillText('Pista '+Math.round(pw*100)+' % agua',tx,y+38);
+  ctx.font='600 12px system-ui,sans-serif';ctx.fillStyle='#9fc6ff';ctx.fillText('Pista '+Math.round(pw*100)+' % agua'+(R.temps?' · '+Math.round(R.temps.air)+'° / asfalto '+Math.round(R.temps.track)+'°':''),tx,y+38);
   const want=pw>0.62?'W':pw>0.2?'I':null,cw=COMPOUNDS[p.compound].wet;
   if((want&&!cw)||(want==='W'&&p.compound==='I')||(!want&&cw&&(R.meanWet||0)<0.15)){ctx.fillStyle='#ffb300';ctx.font='700 12px system-ui,sans-serif';ctx.fillText('Mejor: '+(want?COMPOUNDS[want].name:'seco'),tx,y+56);}
   if(ui.radar){ctx.fillStyle='#7fb8ff';ctx.font='600 11px system-ui,sans-serif';const t=ui.radar.split(' · ')[0];ctx.fillText('📡 '+t,tx,y+74);}

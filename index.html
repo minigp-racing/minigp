@@ -439,7 +439,7 @@ body:not(.compact) #car{bottom:auto;top:200px}
 <div class="tb sm" data-k="pause" style="left:16px;bottom:104px">II</div>
 
 <div id="menu" class="overlay home">
-  <div id="verTag">v70</div>
+  <div id="verTag">v71</div>
   <div class="card">
     <div class="mtop"><div class="brand"><div class="flag"></div><h1>MINI <span>GP</span></h1></div>
       <div class="micons"><button class="mico" id="bSettings" title="Ajustes" aria-label="Ajustes"></button><button class="mico" id="bFull" title="Pantalla completa" aria-label="Pantalla completa"></button><button class="mico" id="bHelp" title="Cómo se juega" aria-label="Cómo se juega"></button></div></div>
@@ -548,8 +548,8 @@ const COMPOUNDS={
   S:{name:'Blando',grip:1.07,wear:1.75,color:'#e53935',win:[78,105],heat:1.15},
   M:{name:'Medio',grip:1.0,wear:1.0,color:'#fdd835',win:[82,110],heat:1.0},
   H:{name:'Duro',grip:0.94,wear:0.6,color:'#f2f2f2',win:[88,118],heat:0.86},
-  I:{name:'Intermedio',grip:1.0,wear:1.3,color:'#43a047',wet:true,win:[55,90],heat:1.0},
-  W:{name:'Lluvia',grip:1.0,wear:1.2,color:'#1e88e5',wet:true,win:[45,80],heat:0.9}
+  I:{name:'Intermedio',grip:1.0,wear:1.3,color:'#43a047',wet:true,win:[55,90],heat:1.68},
+  W:{name:'Lluvia',grip:1.0,wear:1.2,color:'#1e88e5',wet:true,win:[45,80],heat:1.6}
 };
 // agarre según agua en la pista (0 seco … 1 encharcado)
 function wetFactor(comp,w){
@@ -861,6 +861,7 @@ function forecastWet(R,times){const Wt=R.weather,tr=R.tr,t0=Wt.t;let m=0;Wt.fc=t
   for(const dt of times){Wt.t=t0+dt;let s=0,n=0;for(let i=0;i<tr.N;i+=6){s+=Math.min(1,rainAt(Wt,tr.xs[i],tr.ys[i],Wt.zoneS[i])*1.35);n++;}m=Math.max(m,s/n);}
   Wt.t=t0;Wt.fc=null;return m;}
 function stepWeather(R,dt){
+  if(!R.temps&&R.tr)makeTemps(R,R.tempSeed);trackTempStep(R,dt);
   const Wt=R.weather;if(!Wt||Wt.type==='dry')return;
   Wt.t+=dt;Wt.acc+=dt;
   if(Wt.sur)for(const q of Wt.sur)if(!q.done&&Wt.t>=q.t+(q.kind==='shower'?25:30)){q.done=true;if(R.fx)R.events.push({type:'wxsurprise',kind:q.kind});}
@@ -993,8 +994,9 @@ function makeSession(cfg){
   const R={mode:cfg.mode,steerMode:cfg.steerMode||'sim',aids:cfg.aids!==false,noSC:!!cfg.noSC,formation:!!cfg.formation,sets:cfg.sets?Object.assign({},cfg.sets):null,inc:cfg.incidents==null?1:cfg.incidents,yellow:[],damage:cfg.damage!==false,tr,cars,laps:cfg.laps,mult:cfg.mult,est:cfg.est,t:0,phase:'countdown',cd:0,lightsOut:5.3+Math.random()*1.2,
     input:{up:0,down:0,left:0,right:0},drsManual:!!cfg.drsManual,standings:null,fx:!!cfg.fx,skids:null,events:[]};
   if(cfg.fx){R.skids={buf:new Float32Array(6000*4),n:0,head:0};}
-  R.weather=makeWeather(tr,cfg.weather||'dry',cfg.weatherSeed||Math.floor(Math.random()*1e9));R.water=new Float32Array(tr.N);R.meanWet=0;R.dry=new Float32Array(tr.N);R.lineLat=new Float32Array(tr.N);
+  R.weather=makeWeather(tr,cfg.weather||'dry',cfg.weatherSeed||Math.floor(Math.random()*1e9));R.tempSeed=cfg.weatherSeed||Math.floor(Math.random()*1e9);R.water=new Float32Array(tr.N);R.meanWet=0;R.dry=new Float32Array(tr.N);R.lineLat=new Float32Array(tr.N);
   if(cfg.weather==='rain'){R.weather.t=0;for(let k=0;k<200;k++)stepWeather(R,0.2);R.weather.t=0;}
+  if(!R.temps)makeTemps(R,R.tempSeed);
   if(cfg.mode==='quali'){
     const idx=90;R.practice=!!cfg.practice;
     // entrenamientos libres: los rivales repartidos por la pista
@@ -1055,6 +1057,25 @@ function makeSession(cfg){
   return R;
 }
 
+/* ---------- v71: temperatura del aire y del asfalto ----------
+   Aire: según el circuito (clima típico de su fecha), ±4 °C por fin de semana (semilla del clima) y más fresco al atardecer/noche.
+   Asfalto: aire + sol (hasta +16 °C a pleno sol de día, menos con nubes, nada de noche); el agua lo enfría hacia el aire y la lluvia enfría también el aire.
+   Referencia (24 °C aire, 36 °C asfalto) = lo de antes: los bots y las pruebas no cambian en condiciones normales. */
+const AIRT={'Monza':26,'Spa-Francorchamps':18,'Interlagos':25,'Imola':22,'Montmeló':26,'Madring':29,'Silverstone':20,'Hungaroring':30,'Red Bull Ring':23,'Zandvoort':19,'Albert Park':21,'Baréin':31,'Shanghái':22,'Paul Ricard':27,'Sochi':24,'COTA':29,'México':21,'Yas Marina':30,'Nürburgring':17,'Portimão':25};
+let SESS_TOD='day'; /* la interfaz la fija al empezar la sesión (hora elegida) */
+function airBase(tr){const n=tr&&tr.name||'';for(const k in AIRT)if(n.indexOf(k)===0||n===k)return AIRT[k];
+  if(/Losail|Yeda|Sepang|Singap|Marina Bay|Jacarepagu/.test(n))return 30;if(/Las Vegas/.test(n))return 15;if(/Mónaco|Monaco|Suzuka|Baku|Montreal|Canad|Mugello|Kyalami|Jarama|Watkins|Indian|Estoril|Hockenheim|Magny/.test(n))return 22;return 24;}
+function makeTemps(R,seed){const tr=R.tr,t=SESS_TOD,r=((Math.sin((seed||1)*12.9898)*43758.5453)%1+1)%1;
+  const air=airBase(tr)+(r-0.5)*8-(t==='sunset'?3:t==='dusk'?4:t==='night'?7:0),sun=t==='night'?0:t==='sunset'?0.4:t==='dusk'?0.25:1;
+  R.temps={air0:air,air,sun,track:air+16*sun*(R.weather&&R.weather.type!=='dry'?0.5:1)};trackTempStep(R,600);}
+/* nubosidad: con tiempo variable o lluvia, lo que llueva sobre el circuito (y algo de nubes siempre) */
+function trackTempStep(R,dt){const T=R.temps;if(!T)return;const Wt=R.weather,tr=R.tr;let rain=0,cloud=0.05;
+  if(Wt&&Wt.type!=='dry'){const b=tr.bounds;rain=b?rainAt(Wt,(b.minX+b.maxX)/2,(b.minY+b.maxY)/2,1):0.3;cloud=Math.min(1,(Wt.type==='rain'?0.6:0.3)+rain*1.4);}
+  const wet=R.meanWet||0;T.air+=(T.air0-4*Math.min(1,rain)-T.air)*Math.min(1,dt/90);
+  const tgt=T.air+16*T.sun*(1-cloud)*(1-0.85*Math.min(1,wet*1.5))-2*Math.min(1,wet*2);
+  T.track+=(tgt-T.track)*Math.min(1,dt/(tgt<T.track?(wet>0.15?70:200):260));}
+/* temperatura a la que tienden las gomas parados (mezcla de contacto con el asfalto y aire); 26 °C en la referencia, como antes */
+function tyreAmb(R){const T=R.temps;return T?26+0.45*(T.track-36)+0.25*(T.air-24):(R.weather&&R.weather.type!=='dry'?18:26);}
 // temperatura de los neumáticos: fuera de su ventana pierden agarre (frías) o se degradan (calientes)
 function tyreTempF(c){const C=COMPOUNDS[c.compound],T=c.tt==null?C.win[0]+10:c.tt;
   if(T<C.win[0])return Math.max(0.78,1-0.0055*(C.win[0]-T));if(T>C.win[1])return Math.max(0.88,1-0.004*(T-C.win[1]));return 1;}
@@ -1066,11 +1087,11 @@ function tyreDist(c,ax,alat){const w=[1,1,1,1],lat=clamp(alat/(2.5*G),-1,1),lon=
   if(c.lockF){w[0]+=0.6;w[1]+=0.6;}
   const m=(w[0]+w[1]+w[2]+w[3])/4;return w.map(x=>Math.max(0.15,x/m));}
 function tyreHeat(R,c,v,loadG,dt,ax,alat){ // loadG: aceleración total en g
-  const C=COMPOUNDS[c.compound],amb=(R.weather&&R.weather.type!=='dry'?18:26)+(c.wet||0)*-6;
+  const C=COMPOUNDS[c.compound],amb=(R.temps?tyreAmb(R):(R.weather&&R.weather.type!=='dry'?18:26))+(c.wet||0)*-6; /* v71: según aire y asfalto */
   const heat=(2.1*loadG*Math.min(1.1,v/VMAX)+4*c.skid+(c.surf==='grass'||c.surf==='gravel'?2*Math.min(1,v/150):0))*C.heat;
   if(!c.tts)c.tts=[c.tt,c.tt,c.tt,c.tt];
   const w=ax==null?[1,1,1,1]:tyreDist(c,ax,alat);c.tdist=w;let sum=0;
-  for(let i=0;i<4;i++){const T=c.tts[i],cool=0.035*(T-amb)*(0.5+v/VMAX)+(c.wet||0)*0.9*(T-amb)*0.1;c.tts[i]=clamp(T+(heat*w[i]-cool)*dt,amb,160);sum+=c.tts[i];}
+  for(let i=0;i<4;i++){const T=c.tts[i],cool=0.035*(T-amb)*(0.5+v/VMAX)+(c.wet||0)*0.035*(T-amb) /* v71: el agua enfría como el aire (antes 0,09: las gomas de lluvia se quedaban a 20-30 °C, por debajo de su ventana) */;c.tts[i]=clamp(T+(heat*w[i]-cool)*dt,amb,160);sum+=c.tts[i];}
   c.tt=sum/4;
   // v45: graining. Deslizar con la goma por debajo de su temperatura levanta la superficie (sobre todo el blando):
   // agarra hasta un 8 % menos; conduciendo limpio se va limpiando en ~2 vueltas. En mojado no se forma.
@@ -1540,13 +1561,14 @@ function physicsSim(R,c,dt){
   {const ay=clamp(vf*c.r/G,-5,5);c.roll=(c.roll||0)+(ay-(c.roll||0))*Math.min(1,dt/0.17);c.rollLag=Math.abs(ay-c.roll);} // balanceo (en G), con ~0,17 s de retraso
   tyreHeat(R,c,v,Math.hypot(ax,vf*c.r)/G,dt,ax,vf*c.r);
   // temperatura del motor: sube con gas y aire caliente del de delante; baja con la velocidad
-  c.temp=(c.temp||90)+(0.45*thr*(1+0.6*c.slip)*EM.heat+0.55*c.dirty*thr-0.012*((c.temp||90)-75)*(0.4+v/VMAX)*(1-0.45*c.dirty))*dt;
+  c.temp=(c.temp||90)+(0.45*thr*(1+0.6*c.slip)*EM.heat+0.55*c.dirty*thr-0.012*((c.temp||90)-75-(R.temps?0.5*(R.temps.air-24):0))*(0.4+v/VMAX)*(1-0.45*c.dirty))*dt; /* v71: con aire caliente el motor se calienta más */
   if(R.mult){
     const C=COMPOUNDS[c.compound];
     const dryPen=C.wet?1+(c.compound==='W'?2.2:1.5)*Math.max(0,0.2-(c.wet||0))/0.2:1;
     const load=Math.hypot(ax,vf*c.r)/(3.2*G);
     const hotW=c.tt>C.win[1]?1+(c.tt-C.win[1])/15:1;
-    const dw=(load*WEAR_BASE*0.2+c.skid*0.0012)*C.wear*dryPen*(1+0.3*(c.traits?c.traits.bru:0))*R.mult*dt;
+    const trkW=R.temps?clamp(1+0.012*(R.temps.track-36),0.82,1.35):1; /* v71: asfalto caliente = más abrasión */
+    const dw=(load*WEAR_BASE*0.2+c.skid*0.0012)*C.wear*dryPen*(1+0.3*(c.traits?c.traits.bru:0))*trkW*R.mult*dt;
     if(!c.tws)c.tws=[c.wear,c.wear,c.wear,c.wear];const w=c.tdist||[1,1,1,1];let mx=0,sm=0;
     for(let i=0;i<4;i++){const Ti=c.tts?c.tts[i]:c.tt,hw=Ti>C.win[1]?1+(Ti-C.win[1])/15:1;c.tws[i]=Math.min(1,c.tws[i]+dw*w[i]*hw);mx=Math.max(mx,c.tws[i]);sm+=c.tws[i];}
     c.wear=0.6*mx+0.4*sm/4; // manda el neumático más gastado
@@ -3307,7 +3329,7 @@ function startAttract(){
 }
 function showHud(v){$('hud').classList.toggle('hidden',!v);}
 
-function launch(cfg,btn){if(cfg.weather==='rand'){const u=Math.random();cfg.weather=u<0.5?'dry':u<0.85?'var':'rain';} /* v68: clima aleatorio también en carrera rápida (no se sabe hasta ver la previsión) */
+function launch(cfg,btn){SESS_TOD=settings.tod||'day';if(cfg.weather==='rand'){const u=Math.random();cfg.weather=u<0.5?'dry':u<0.85?'var':'rain';} /* v68: clima aleatorio también en carrera rápida (no se sabe hasta ver la previsión) */
   audioInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
   const txt=btn.innerHTML;btn.disabled=true;btn.innerHTML=btn.classList.contains('mi')?'<b>Preparando…</b>':'Preparando…';
   setTimeout(()=>{try{newEvent(cfg);}finally{btn.disabled=false;btn.innerHTML=txt;}},30);
@@ -5616,7 +5638,7 @@ function drawWeatherPanel(G){
   ctx.strokeStyle='rgba(143,208,255,.35)';ctx.lineWidth=1;for(const k of [0.33,0.66,1]){ctx.beginPath();ctx.arc(cx,cy,D/2*k,0,Math.PI*2);ctx.stroke();}
   // texto a la derecha
   const tx=x+D+22;ctx.fillStyle='#fff';ctx.font='700 13px system-ui,sans-serif';ctx.fillText(sky,tx,y+20);
-  ctx.font='600 12px system-ui,sans-serif';ctx.fillStyle='#9fc6ff';ctx.fillText('Pista '+Math.round(pw*100)+' % agua',tx,y+38);
+  ctx.font='600 12px system-ui,sans-serif';ctx.fillStyle='#9fc6ff';ctx.fillText('Pista '+Math.round(pw*100)+' % agua'+(R.temps?' · '+Math.round(R.temps.air)+'° / asfalto '+Math.round(R.temps.track)+'°':''),tx,y+38);
   const want=pw>0.62?'W':pw>0.2?'I':null,cw=COMPOUNDS[p.compound].wet;
   if((want&&!cw)||(want==='W'&&p.compound==='I')||(!want&&cw&&(R.meanWet||0)<0.15)){ctx.fillStyle='#ffb300';ctx.font='700 12px system-ui,sans-serif';ctx.fillText('Mejor: '+(want?COMPOUNDS[want].name:'seco'),tx,y+56);}
   if(ui.radar){ctx.fillStyle='#7fb8ff';ctx.font='600 11px system-ui,sans-serif';const t=ui.radar.split(' · ')[0];ctx.fillText('📡 '+t,tx,y+74);}
