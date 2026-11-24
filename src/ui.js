@@ -2681,12 +2681,13 @@ const B3={st:0,skip:false};
 function b3On(tr){const want=settings.real3d!==0;if(B3.want!==want){if(B3.want!=null)clearTiles();B3.want=want;} /* al cambiar la opción se rehacen las baldosas */
   if(!tr||!realOf(tr)||!want)return false;if(C3.st!==2){if(!C3.st)c3Load();return false;}if(!B3.st)b3Init();if(B3.st!==2)return false;if(B3.tr!==tr)b3Track(tr);return true;}
 function b3Init(){B3.st=1;try{const T=C3.T;B3.T=T;
-  const rd=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true,alpha:false});rd.shadowMap.enabled=true;rd.shadowMap.type=T.PCFSoftShadowMap;rd.outputColorSpace=T.SRGBColorSpace;
+  const rd=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true,alpha:true,premultipliedAlpha:false});rd.setClearColor(0x000000,0);rd.shadowMap.enabled=true;rd.shadowMap.type=T.PCFSoftShadowMap;rd.outputColorSpace=T.SRGBColorSpace;
   const sc=new T.Scene(),cam=new T.OrthographicCamera(-1,1,1,-1,1,6000);cam.up.set(0,0,-1);
   const hemi=new T.HemisphereLight(0xdfe9ff,0x4a4632,0.62),sun=new T.DirectionalLight(0xfff2dc,1.0);sun.castShadow=true;sun.shadow.mapSize.set(1536,1536);sun.shadow.bias=-0.0004;sun.shadow.normalBias=0.8;sun.shadow.radius=3;
   sc.add(hemi,sun,sun.target);
   const gtex=new T.CanvasTexture(document.createElement('canvas'));gtex.colorSpace=T.SRGBColorSpace;gtex.generateMipmaps=false;gtex.minFilter=gtex.magFilter=T.LinearFilter;
-  const gmat=new T.MeshStandardMaterial({map:gtex,bumpMap:gtex,bumpScale:1.6,roughness:0.95,metalness:0});
+  /* v70: el suelo ya no se sube como textura (casi 3 MB por baldosa: tirones): plano invisible que solo recoge las sombras; la escena se pinta encima del suelo 2D */
+  const gmat=new T.ShadowMaterial({opacity:0.42});
   const ground=new T.Mesh(new T.PlaneGeometry(1,1),gmat);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;sc.add(ground);
   /* copa de árbol: 5 esferas abultadas e irregulares (normales de esfera para que la luz sea suave) */
   const R=rng(9001),parts=[];const lobes=[[0,0.05,0,0.78],[0.46,-0.05,0.1,0.55],[-0.42,0,0.22,0.56],[0.1,0.02,-0.48,0.55],[-0.2,0.22,-0.15,0.5],[0.25,0.25,0.3,0.45]];
@@ -2697,6 +2698,7 @@ function b3Init(){B3.st=1;try{const T=C3.T;B3.T=T;
   const leaf=new T.MeshStandardMaterial({roughness:0.92,metalness:0});
   const mk=(geo,n)=>{const m=new T.InstancedMesh(geo,leaf,n);m.castShadow=true;m.receiveShadow=true;m.count=0;m.frustumCulled=false;sc.add(m);return m;};
   Object.assign(B3,{rd,sc,cam,hemi,sun,gtex:null,gmat,ground,trees:{dec:mk(crown,4000),con:mk(cone,1500),pine:mk(umb,1500)},bld:[],st:2});
+  try{rd.setSize(64,64,false);for(const k in B3.trees)B3.trees[k].count=1;rd.render(sc,cam);for(const k in B3.trees)B3.trees[k].count=0;}catch(e){} /* v70: prepara los sombreadores al cargar (la primera baldosa tardaba ~300 ms) */
   clearTiles();}catch(e){console.warn('3D horneado no disponible:',e);B3.st=-1;}}
 function b3Merge(T,list){let n=0;for(const g of list){const q=g.index?g.toNonIndexed():g;n+=q.attributes.position.count;}const pos=new Float32Array(n*3),nor=new Float32Array(n*3);let o=0;
   for(const g0 of list){const g=g0.index?g0.toNonIndexed():g0;if(!g.attributes.normal)g.computeVertexNormals();pos.set(g.attributes.position.array,o);nor.set(g.attributes.normal.array,o);o+=g.attributes.position.array.length;}
@@ -2719,8 +2721,7 @@ function b3Sun(cx,cz){const SV=sunVec(),t=settings.tod||'day',el=(t==='sunset'?1
 const B3M=300; /* margen: árboles y edificios de fuera de la baldosa que dan sombra dentro */
 function b3Bake(G,tr,tx,ty,c){const T=B3.T,x0=tx*TILE,y0=ty*TILE,cx=x0+TILE/2,cz=y0+TILE/2,W=c.width;
   /* la textura de WebGL2 tiene tamaño fijo: se rehace si cambia el tamaño de la baldosa */
-  if(!B3.gtex||B3.gtW!==W){if(B3.gtex)B3.gtex.dispose();const tx2=new T.CanvasTexture(c);tx2.colorSpace=T.SRGBColorSpace;tx2.generateMipmaps=false;tx2.minFilter=tx2.magFilter=T.LinearFilter;B3.gtex=tx2;B3.gtW=W;B3.gmat.map=B3.gmat.bumpMap=tx2;B3.gmat.needsUpdate=true;}
-  B3.gtex.image=c;B3.gtex.needsUpdate=true;B3.ground.position.set(cx,0,cz);B3.ground.scale.set(TILE,TILE,1);
+B3.ground.position.set(cx,0,cz);B3.ground.scale.set(TILE,TILE,1);
   /* árboles de la zona: bosque + árboles sueltos (con su especie) */
   const th=themeOf(tr),M=new T.Matrix4(),Q=new T.Quaternion(),P=new T.Vector3(),S=new T.Vector3(),C=new T.Color(),UP=new T.Vector3(0,1,0),n={dec:0,con:0,pine:0};
   const put=(kind,x,y,r,s,h)=>{const m=B3.trees[kind];if(n[kind]>=m.instanceMatrix.count)return;const hh=(h||1)*(kind==='con'?r*2.6:kind==='pine'?r*2.9:r*2.2+20);
@@ -2731,6 +2732,8 @@ function b3Bake(G,tr,tx,ty,c){const T=B3.T,x0=tx*TILE,y0=ty*TILE,cx=x0+TILE/2,cz
   for(let yy=Math.floor(by0/TILE);yy<=Math.floor(by1/TILE);yy++)for(let xx=Math.floor(bx0/TILE);xx<=Math.floor(bx1/TILE);xx++){const a=F.bk.get(xx+','+yy);if(a)for(const t of a)if(t.x>bx0&&t.x<bx1&&t.y>by0&&t.y<by1)put('dec',t.x,t.y,t.r,(t.v+1)*0.137+t.x*0.0001,1);}
   for(const t of tr.trees){if(t.x<bx0||t.x>bx1||t.y<by0||t.y>by1)continue;const kd=treeKind(th,t);if(!kd)continue;put(kd==='palm'?'pine':kd,t.x,t.y,t.r*1.1,t.s,1.15);
     if(th&&th.dens>1&&((t.s*31.7)%1)<th.dens-1)put(kd==='palm'?'pine':kd,t.x+28*Math.cos(t.s*40),t.y+28*Math.sin(t.s*40),t.r*0.95,(t.s*3.3)%1,1.1);}
+  /* sin árboles ni edificios cerca: la baldosa se queda como está (no hace falta el 3D) */
+  if(!n.dec&&!n.con&&!n.pine&&!B3.bld.some(b=>b.position.x>bx0&&b.position.x<bx1&&b.position.z>by0&&b.position.z<by1))return;
   for(const k in B3.trees){const m=B3.trees[k];m.count=n[k];m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
   b3Sun(cx,cz);const SC=B3.sun.shadow.camera,E=(TILE/2+B3M)*1.15;SC.left=SC.bottom=-E;SC.right=SC.top=E;SC.near=10;SC.far=6500;SC.updateProjectionMatrix();
   const cam=B3.cam;cam.left=-TILE/2;cam.right=TILE/2;cam.top=TILE/2;cam.bottom=-TILE/2;cam.position.set(cx,3000,cz);cam.lookAt(cx,0,cz);cam.updateProjectionMatrix();

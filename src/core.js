@@ -4,7 +4,7 @@ const STEER=3.4, STEER_LOSS=0.42, A_LAT=1250, K_LAT=16;
 const W=60, RUNOFF=230, SP=10, KMH=0.55;
 const HL=19, HW=7.5, INERTIA=(4*HL*HL+4*HW*HW)/12, CARW=2*HW; // coche a escala real: 5,6 m × 2 m (6,5 px/m)
 const BOTDEC=0.74,BOTCRN=0.86,RL_MAX=46,L1F=0.97,WGX=0.85,BOTAERO=0.75,BOTLIVE=0.9,BOTLIVEW=0.86,BOTSTK=2.0,BOTSTV=0.8,BOTSTQ=0.5,L1W=22,L1A=0.6,L1LANE=34,L1FADE=500,L1END=300,L1ENDT=1.6,L1K=1,BOTFF=2,BOTFFT=0.12; // fracción de la frenada máxima que usan los bots
-const PIT_LAT=W+65, PIT_BOX=W+99, PIT_V=150, PIT_HALF=26, BOT_BRAKE=BRAKE*0.66;
+const PITDEC=150,PITERR=0.08,PIT_LAT=W+65, PIT_BOX=W+99, PIT_V=150, PIT_HALF=26, BOT_BRAKE=BRAKE*0.66;
 // modos de motor: ahorro / normal / ataque
 const EMODES=[{n:'Ahorro',p:0.965,heat:0.55,fuel:0.88,wear:0.5},{n:'Normal',p:1,heat:1,fuel:1,wear:1},{n:'Ataque',p:1.035,heat:1.5,fuel:1.12,wear:2.2}];
 const FUEL_RATE=0.17, WEAR_BASE=0.0058, TANK=100;
@@ -633,7 +633,7 @@ function botControl(R,c,dt){
       if(underSC)break;
       // adelantar: los agresivos buscan hueco antes
       /* v68: si el de delante va claramente más lento, busca hueco antes; y una vez decidido mantiene el carril de adelantar (antes, al apartarse un coche de lado dejaba de cumplir la condición, volvía detrás y frenaba) */
-      const strP=!tr.corner[c.idx]&&!tr.corner[(c.idx+20)%N]&&!tr.corner[(c.idx+40)%N], /* solo en recta: en frenada el de delante siempre va más lento y, manteniendo el carril, llegaban a la curva por el borde */
+      const strP=!tr.corner[c.idx]&&!tr.corner[(c.idx+20)%N]&&!tr.corner[(c.idx+40)%N]&&!tr.corner[(c.idx+70)%N]&&!tr.corner[(c.idx+Math.round(40+Math.hypot(c.vx,c.vy)*0.22))%N], /* v70: también fuera de la zona de frenada (a 330 km/h, ~150 m antes de la Parabólica) */ /* solo en recta: en frenada el de delante siempre va más lento y, manteniendo el carril, llegaban a la curva por el borde */
         oSlowP=strP&&!dead&&Math.hypot(o.vx,o.vy)<0.85*Math.hypot(c.vx,c.vy),pW=strP&&c.passId===o.id&&R.t-(c.passT||0)<4;
       if(d>0&&d<(dead?(HAZ?HAZD:22):oSlowP||pW?18:8+8*T.agr)&&Math.abs(o.lat-c.lat)<CARW+(pW?44:12)&&!(c.lap<=1&&R.mode==='race'&&!dead&&T.agr<L1A&&(tr.corner[(c.idx+12)%N]||tr.corner[(c.idx+25)%N]))&&(!yel||dead||o.recover>0||Math.hypot(o.vx,o.vy)<60)){off=o.lat>c.lat?o.lat-(CARW+18):o.lat+(CARW+18);if(!dead){c.passId=o.id;c.passT=R.t;}}
       // rueda con rueda: si está solapado a mi lado, le dejo un coche de hueco (no le cierro la puerta)
@@ -785,6 +785,8 @@ function pitControl(R,c,dt){
     {const bi=((Math.round(boxD(c.slot))%N)+N)%N,bx=tr.xs[bi]+tr.nx[bi]*tr.pitSide*PIT_BOX,by=tr.ys[bi]+tr.ny[bi]*tr.pitSide*PIT_BOX,k=Math.min(1,4*dt);
      c.x+=(bx-c.x)*k;c.y+=(by-c.y)*k;c.a+=angNorm(tr.ang[bi]-c.a)*k;}
     if(c.pitT<=0&&R.liveQ){c.qLaps=0;if(c.bot){const w=R.meanWet||0;c.nextCompound=w>0.62?'W':w>0.2?'I':'S';}}
+    /* v70: suelta segura (bots): el mecánico no suelta el coche si viene otro por el carril del pit lane justo detrás (antes salían todos a la vez y se juntaban en la primera curva) */
+    if(c.pitT<=0&&c.bot&&!R.liveQ){const bd0=boxD(c.slot);for(const o of R.cars){if(o===c||(o.pit!=='in'&&o.pit!=='out'))continue;const od=dOf(tr,o.idx),dd=bd0-od;if(dd>-3&&dd<16){c.pitT=0.05;break;}}}
     if(c.pitT<=0){c.compound=c.nextCompound;c.wear=takeSet(R,c);c.tt=COMPOUNDS[c.compound].wet?58:80; /* v54: mantas térmicas (antes salían a 50/68 °C, −7 % de agarre: el undercut casi nunca salía) */c.tts=[c.tt,c.tt,c.tt,c.tt];c.tws=[c.wear,c.wear,c.wear,c.wear];c.grain=0;c.punct=false;if(c.dWing>0.15&&c.fixNose!==false)c.dWing=0;c.fixNose=null;if(c.wheelOff!=null)c.wheelOff=null;c.fuel=Math.min(TANK,c.fuel+c.fuelAdd);c.stops++;c.lastStopLap=c.lap;c.pittedThisLap=true;c.pit='out';
       // v45: las averías (aceite, frenos) ya no se arreglan en boxes: solo el morro
       if(c.looseW!=null){c.looseAt=R.t+3+Math.random()*9;}
@@ -815,20 +817,26 @@ function pitControl(R,c,dt){
   steerTo(c,tr,ti,tr.pitSide*tl);
   let target;
   if(c.pit==='in'){
-    target=d<-PITL?Math.sqrt(PIT_V*PIT_V+2*700*Math.max(0,(-PITL-d)*tr.sp)):PIT_V;
+    /* v70: frenada de verdad hasta la línea (~4,5 g; antes se suponían 11 g: cruzaban a 200-250 km/h y el coche aparecía de golpe en su box). Alguno calcula mal (c.pitErr: frena tarde) y se lleva la sanción */
+    if(c.pitErr==null)c.pitErr=Math.random()<PITERR?0.55+Math.random()*0.3:1;
+    const lv=PIT_V*0.9/(c.pitErr<1?0.8:1);
+    target=d<-PITL-8?Math.sqrt(lv*lv+2*PITDEC/c.pitErr*Math.max(0,(-PITL-8-d)*tr.sp)):d<-PITL?lv:PIT_V;
     const rem=(bd-d)*tr.sp;
-    if(d>=-PITL-5)target=Math.min(target,Math.sqrt(Math.max(0,2*450*(rem-4))));
+    if(d>=-PITL-5)target=Math.min(target,Math.sqrt(Math.max(0,2*190*(rem-4))));
+    if(!c.pitLineX&&d>=-PITL-1&&d<0){c.pitLineX=true;if(vf>PIT_V*1.1&&R.mode==='race'){c.pen+=5;c.pens=(c.pens||0)+1;if(R.fx)R.events.push({type:'pit_speed_bot',car:c,kmh:Math.round(vf*KMH)});}}
     if((rem<9&&Math.abs(vf)<30)||rem<-15)startService(R,c,vf);
   }else{
     const jo=(c.idx+2)%N,wvo=clamp((c.wet||0)*1.6,0,1),vlo=SIMB&&tr.vWet&&wvo>0.02?tr.vLimS[jo]*(1-wvo)+tr.vWet[jo]*wvo:(SIMB?tr.vLimS:tr.vLim)[jo],wro=wetFactor(c.compound,c.wet||0)*tyreTempF(c);
     target=d<PITL?PIT_V:vlo*0.92*Math.sqrt(Math.min(1.05,tyreGrip(c)))*(wro<0.95?Math.pow(wro,WGX-0.5):1); /* v65: también con agua y gomas frías (en Spa mojado salían a velocidad de seco hacia La Source y se amontonaban) */ /* v64: al salir del pit lane respeta la curva que viene (antes iba a fondo: en Spa llegaban pasados a la primera curva y se salían) */
+    /* v70: al incorporarse cede a los coches de la pista que vienen por ese lado */
+    if(c.bot&&d>PITL-6)for(const o of R.cars){if(o===c||o.pit||o.dnf)continue;const dd=((c.idx-o.idx)%N+N)%N;if(dd<14&&o.lat*tr.pitSide>-10){const ov=Math.max(0,o.vx*tr.tx[o.idx]+o.vy*tr.ty[o.idx]);target=Math.min(target,ov*0.9);}}
     if(d>PITL+PITE+2){c.pit=null;c.pitReq=false;}
   }
   /* v64: en el pit lane se guarda la distancia con el de delante (ahora hay contacto) */
   if(PITHIT)for(const o of R.cars){if(o===c||!o.pit||o.pit==='service'||o.gone||o.dnf)continue;const dd=((o.idx-c.idx)%N+N)%N;if(dd>0&&dd<9&&Math.abs(o.lat-c.lat)<CARW+4){const ov=Math.max(0,o.vx*tr.tx[o.idx]+o.vy*tr.ty[o.idx]);target=Math.min(target,Math.max(0,ov+(dd*tr.sp-2*HL-10)*1.5));}}
   speedCtl(c,vf,target);
 }
-function startService(R,c,vf){{c.pit='service';c.pitLineX=false;const wasRain=c.rainCall;c.rainCall=false;if(c.bot&&R.mode==='race'&&!wasRain){c.nextCompound=compoundFor(R,c,c.nextCompound);} /* v61: si paró por el tiempo, monta la goma que se decidió al llamarle (antes se recalculaba y a veces volvía a montar la misma) */ /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitFail=null;if(R.mode==='race'&&!R.liveQ)pitMishap(R,c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
+function startService(R,c,vf){{c.pit='service';c.pitLineX=false;c.pitErr=null;const wasRain=c.rainCall;c.rainCall=false;if(c.bot&&R.mode==='race'&&!wasRain){c.nextCompound=compoundFor(R,c,c.nextCompound);} /* v61: si paró por el tiempo, monta la goma que se decidió al llamarle (antes se recalculaba y a veces volvía a montar la misma) */ /* v45: si paró a cambiar por lluvia, no vuelve a montar la misma */c.fuelAdd=planFuel(R,c);c.pitT=serviceTimeT(c);c.pitFail=null;if(R.mode==='race'&&!R.liveQ)pitMishap(R,c);c.pitTotal=c.pitT;c.vx=0;c.vy=0;
       if(R.liveQ){c.fuelAdd=0;c.pitReq=false;c.qFly=false;const L=R.liveQ,nx=c.qRuns?c.qRuns[++c.qRun]:null;c.pitT=(!c.bot||L.flag||c.qDone||nx==null)?1e9:Math.max(3,nx-L.t);c.pitTotal=c.pitT;}
       if(R.fx)R.events.push({type:'pitstop',car:c});}
 }
