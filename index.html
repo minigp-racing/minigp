@@ -439,7 +439,7 @@ body:not(.compact) #car{bottom:auto;top:200px}
 <div class="tb sm" data-k="pause" style="left:16px;bottom:104px">II</div>
 
 <div id="menu" class="overlay home">
-  <div id="verTag">v73</div>
+  <div id="verTag">v74</div>
   <div class="card">
     <div class="mtop"><div class="brand"><div class="flag"></div><h1>MINI <span>GP</span></h1></div>
       <div class="micons"><button class="mico" id="bSettings" title="Ajustes" aria-label="Ajustes"></button><button class="mico" id="bFull" title="Pantalla completa" aria-label="Pantalla completa"></button><button class="mico" id="bHelp" title="Cómo se juega" aria-label="Cómo se juega"></button></div></div>
@@ -4095,7 +4095,8 @@ function replayRecord(dt){
   if(!R||attract)return;RB.acc+=dt;if(RB.acc<1/30)return;RB.acc=0;
   const n=R.cars.length,a=new Float32Array(n*5);R.cars.forEach((c,k)=>{a[k*5]=c.x;a[k*5+1]=c.y;a[k*5+2]=c.a;a[k*5+3]=c.brake;a[k*5+4]=Math.hypot(c.vx,c.vy);});
   let dd=null;if(R.debris&&R.debris.length){const D=R.debris;dd={o:D.slice(),p:new Float32Array(D.length*3)};D.forEach((d,k)=>{dd.p[k*3]=d.x;dd.p[k*3+1]=d.y;dd.p[k*3+2]=d.a;});}
-  RB.buf.push({t:R.t,c:a,d:dd,sc:R.sc&&R.sc.phase!=='gone'?[R.sc.x,R.sc.y,R.sc.a]:null});if(RB.buf.length>750)RB.buf.shift();
+  const pg=new Float32Array(n);R.cars.forEach((c,k)=>{pg[k]=c.dnf?-1e6:(c.prog||0);}); /* v74: avance (orden y diferencias en la repetición) */
+  RB.buf.push({t:R.t,c:a,p:pg,d:dd,sc:R.sc&&R.sc.phase!=='gone'?[R.sc.x,R.sc.y,R.sc.a]:null});if(RB.buf.length>750)RB.buf.shift();
   hlCapture();
 }
 // ---------- v45: resumen de la carrera ----------
@@ -4149,7 +4150,7 @@ function stopReplay(force){const r=ui.replay;if(!r)return;
 function replayFrame(dt){
   const r=ui.replay,BUF=r.buf||RB.buf;if(r.run)r.pos+=dt*30*r.speed;if(r.auto&&r.pos>=r.end){stopReplay();return;}if(r.pos>=BUF.length-1){r.pos=0;}
   const i=Math.floor(r.pos),f=r.pos-i,A=BUF[i],B=BUF[Math.min(BUF.length-1,i+1)];
-  r.curT=A.t!=null&&B.t!=null?A.t+(B.t-A.t)*f:null; // v45: hora de la carrera en la repetición (vuelcos, coche entero antes del golpe)
+  r.curT=A.t!=null&&B.t!=null?A.t+(B.t-A.t)*f:null;r.curP=A.p||null; // v45: hora de la carrera en la repetición (vuelcos, coche entero antes del golpe)
   R.cars.forEach((c,k)=>{const o=k*5;c.x=A.c[o]+(B.c[o]-A.c[o])*f;c.y=A.c[o+1]+(B.c[o+1]-A.c[o+1])*f;c.a=A.c[o+2]+angNorm(B.c[o+2]-A.c[o+2])*f;c.brake=A.c[o+3];c.vx=Math.cos(c.a)*A.c[o+4];c.vy=Math.sin(c.a)*A.c[o+4];});
   if(R.sc&&A.sc){R.sc.x=A.sc[0];R.sc.y=A.sc[1];R.sc.a=A.sc[2];}
   if(A.d){A.d.o.forEach((d,k)=>{d.x=A.d.p[k*3];d.y=A.d.p[k*3+1];d.a=A.d.p[k*3+2];});R.debris=A.d.o;}else R.debris=[];
@@ -4165,6 +4166,29 @@ function replayFrame(dt){
   if(r.tv){const w=0.5*clamp(1-Math.hypot(t.x-r.cx,t.y-r.cy)/700,0,1),tx=r.tv.x*w+t.x*(1-w),ty=r.tv.y*w+t.y*(1-w);cam.x+=(tx-cam.x)*k;cam.y+=(ty-cam.y)*k;}else{cam.x+=(t.x-cam.x)*k;cam.y+=(t.y-cam.y)*k;}cam.rot+=angNorm(-t.a-Math.PI/2-cam.rot)*Math.min(1,4*dt);
   const base=clamp(Math.min(VW,VH)/640*1.45,0.7,2.2);cam.z+=(base*0.9-cam.z)*Math.min(1,2*dt);
 }
+/* ---------- v74: gráficos de retransmisión en las repeticiones ---------- */
+function drawTvGfx(){const r=ui.replay;if(!r||!R||R.mode!=='race')return;const P=r.curP;if(!P)return;
+  const tr=R.tr,spd=Math.max(200,tr.len/Math.max(30,R.est&&R.est.lap||90)),ord=R.cars.map((c,k)=>({c,k,p:P[k]})).filter(o=>o.p>-1e5).sort((a,b)=>b.p-a.p);
+  const sx=COMPACT?0.8:1,F=(w,sz)=>w+' '+Math.round(sz*sx)+'px system-ui,sans-serif';ctx.save();ctx.setTransform(DPR,0,0,DPR,0,0);ctx.textBaseline='middle';
+  /* mosca */
+  const bx=VW-14-150*sx,by=14;ctx.fillStyle='rgba(8,10,14,.82)';ctx.fillRect(bx,by,150*sx,26*sx);ctx.fillStyle='#e10600';ctx.fillRect(bx,by,6*sx,26*sx);
+  ctx.fillStyle='#fff';ctx.font=F('900 italic',13);ctx.textAlign='left';ctx.fillText('MINI GP',bx+12*sx,by+13*sx);ctx.font=F('700',10);ctx.fillStyle='#ff5a4f';ctx.fillText('● REPETICIÓN',bx+72*sx,by+13*sx);
+  /* torre: posición, color del equipo, nombre corto y diferencia con el de delante */
+  const rows=Math.min(ord.length,COMPACT?6:10),rh=19*sx,tx=12,ty=COMPACT?60:(VH*0.16);
+  ctx.fillStyle='rgba(8,10,14,.82)';ctx.fillRect(tx,ty-24*sx,150*sx,24*sx+rows*rh);ctx.fillStyle='#fff';ctx.font=F('800',11);ctx.fillText('VUELTA '+Math.max(1,Math.min(R.laps,Math.floor(ord[0].p/tr.N)+1))+'/'+R.laps,tx+8,ty-12*sx);
+  const tgt=R.cars[r.target];
+  for(let i=0;i<rows;i++){const o=ord[i],y=ty+i*rh,me=o.c===tgt;if(me){ctx.fillStyle='rgba(255,255,255,.14)';ctx.fillRect(tx,y,150*sx,rh);}
+    ctx.fillStyle='#cfd5dc';ctx.font=F('800',11);ctx.textAlign='right';ctx.fillText(String(i+1),tx+18*sx,y+rh/2);ctx.fillStyle=o.c.color||'#888';ctx.fillRect(tx+22*sx,y+4*sx,3*sx,rh-8*sx);
+    ctx.textAlign='left';ctx.fillStyle=o.c.isPlayer?'#ffd23f':'#fff';ctx.font=F('700',11);const nm=(o.c.name||'').split(' ').slice(-1)[0].toUpperCase().slice(0,9);ctx.fillText(nm,tx+30*sx,y+rh/2);
+    ctx.textAlign='right';ctx.fillStyle='#9fb0c3';ctx.font=F('600',10);ctx.fillText(i?'+'+((ord[i-1].p-o.p)*tr.sp/spd).toFixed(1):'LÍDER',tx+144*sx,y+rh/2);}
+  /* rótulo del piloto de la cámara y, si va pegado a otro, la lucha */
+  if(tgt){const pi=ord.findIndex(o=>o.c===tgt);if(pi>=0){const lw=Math.min(VW-24,330*sx),lx=VW/2-lw/2,ly=VH-(COMPACT?150:118)*sx; /* centrado, encima de la barra de la repetición (no tapa el minimapa) */
+    ctx.fillStyle='rgba(8,10,14,.86)';ctx.fillRect(lx,ly,lw,40*sx);ctx.fillStyle=tgt.color||'#888';ctx.fillRect(lx,ly,8*sx,40*sx);
+    ctx.fillStyle='#fff';ctx.font=F('900',20);ctx.textAlign='left';ctx.fillText('P'+(pi+1),lx+16*sx,ly+20*sx);ctx.font=F('800',15);ctx.fillText((tgt.name||'').toUpperCase(),lx+62*sx,ly+14*sx);
+    ctx.font=F('600',11);ctx.fillStyle='#9fb0c3';ctx.fillText((tgt.teamName||'')+(pi?'  ·  a '+((ord[pi-1].p-ord[pi].p)*tr.sp/spd).toFixed(1)+' s de '+(ord[pi-1].c.name||''):'  ·  líder'),lx+62*sx,ly+30*sx);
+    let fight=null;if(pi>0&&(ord[pi-1].p-ord[pi].p)*tr.sp/spd<0.6)fight=[ord[pi-1].c,tgt,pi];else if(pi<ord.length-1&&(ord[pi].p-ord[pi+1].p)*tr.sp/spd<0.6)fight=[tgt,ord[pi+1].c,pi+1];
+    if(fight){const fy=ly-30*sx;ctx.fillStyle='#e10600';ctx.fillRect(lx,fy,lw,24*sx);ctx.fillStyle='#fff';ctx.font=F('800',12);ctx.fillText('LUCHA POR P'+fight[2]+':  '+(fight[0].name||'').split(' ').slice(-1)[0]+'  vs  '+(fight[1].name||'').split(' ').slice(-1)[0],lx+10*sx,fy+12*sx);}}}
+  ctx.restore();}
 function drawReplayBanner(){
   if(!ui.replay)return;const r=ui.replay,t=R.cars[r.target];
   ctx.fillStyle='rgba(9,22,52,.82)';ctx.fillRect(VW/2-170,VH-62,340,44);ctx.fillStyle='#1f6fff';ctx.fillRect(VW/2-170,VH-62,6,44);
@@ -5203,7 +5227,7 @@ function render(dt){
   if(!attract&&!ui.replay)drawSpeedFX(cx,cy,dt);
   if(!attract)drawLens(dt);
   if(!attract)drawConfetti(dt);
-  if(ui.replay){drawMinimap(G);drawReplayBanner();return;}
+  if(ui.replay){drawMinimap(G);drawTvGfx();drawReplayBanner();return;}
   drawMinimap(G);
   drawWeatherPanel(G);
   drawGauges();
