@@ -387,7 +387,7 @@ function onPitLane(tr,c){const d=dOf(tr,c.idx);if(d<-(PITL+PITE+2)||d>PITL+PITE+
 const DIFF={facil:[0.84,0.93],normal:[0.91,0.985],dificil:[0.96,1.035],experto:[1.0,1.06]};
 /* v50: dificultad adaptativa: el nivel de los bots se ajusta tras cada carrera a tu ritmo (ADAPT, lo guarda la interfaz) */
 let ADAPT=0,WADAPT=0; /* v58: WADAPT = ritmo extra (o menos) de los bots con la pista mojada, aprendido aparte (dificultad adaptativa) */
-let DEFMIN=0.45,DEFK=0.4,WETLOOK=1,AQUAK=0.97; /* v50: bots que defienden (carácter mínimo y fuerza base) */
+let FIGHTDEC=0.95,FIGHTW=40,FIGHTL1=1,DEFMIN=0.45,DEFK=0.4,WETLOOK=1,AQUAK=0.97; /* v50: bots que defienden (carácter mínimo y fuerza base) */
 
 // carácter de cada piloto: si no se ha definido a mano, se deriva de su nombre (siempre el mismo para el mismo piloto)
 const STYLES={defensor:{n:'defiende muy duro',def:0.92},agresivo:{n:'muy agresivo atacando',agr:0.92},cuidadoso:{n:'cuida mucho los neumáticos',bru:0.05},rompe:{n:'castiga mucho los neumáticos',bru:0.8},metronomo:{n:'un metrónomo, casi no falla',reg:0.95},irregular:{n:'rápido pero irregular, comete errores',reg:0.15,agr:0.7}};
@@ -708,7 +708,14 @@ function botControl(R,c,dt){
   // primera vuelta con la parrilla agrupada: se frena antes en las curvas y se deja más aire al de delante
   const L1=R.mode==='race'&&R.phase==='race'&&c.lap<=1&&!c.isPlayer;
   // v44: menos prudencia (antes frenaban un 6 % antes y dejaban casi el doble de hueco: las salidas eran un paseo)
-  if(L1&&vl0<VMAX*0.95)target*=L1F;
+  /* v77: pelea en la frenada. Con un rival al lado (otro equipo) llegando a una curva, el bot frena tan tarde como él
+     (FIGHTDEC de la frenada máxima en vez de BOTDEC) hasta el punto de giro; en la curva vuelve a su velocidad normal.
+     Antes frenaban ~20 m antes que el jugador con ABS y en la salida de Monza se les pasaba a una docena por dentro. */
+  let fightB=false;if(FIGHTDEC>0&&R.mode==='race'&&R.phase==='race'&&!underSC&&!yel&&tr.vCorn&&!tr.corner[c.idx]&&vl0<VMAX*0.98&&(FIGHTL1||c.lap>1)&&(c.wet||0)<0.15){
+    for(const o of R.cars){if(o===c||o.dnf||o.pit||o.team===c.team)continue;let d=o.idx-c.idx;if(d>N/2)d-=N;if(d<-N/2)d+=N;if(d>=-5&&d<=6&&Math.abs(o.lat-c.lat)<CARW+FIGHTW){fightB=true;break;}}
+    if(fightB){let vL=1e9;for(let k=2;k<90;k+=3){const j=(c.idx+k)%N,vc=tr.vCorn[j]*c.skill*c.pace,v=Math.max(vc,Math.abs(vf)*0.5),dec=FIGHTDEC*G*(2.7+3.5*Math.min(1,v*v/(VMAX*VMAX)));vL=Math.min(vL,Math.sqrt(vc*vc+2*dec*k*tr.sp));}
+      target=Math.max(target,Math.min(vL,VMAX*1.05));}}
+  c.fightB=fightB;if(L1&&vl0<VMAX*0.95&&!fightB)target*=L1F;
   const agr=L1?T.agr*0.8:T.agr;
   for(const o of R.cars){
     if(o===c||o.pit||o.dnf||o.engineDead||(rc&&o===rc&&Math.abs(o.lat-c.lat)>CARW)||(R.sc&&(c.unlap||o.unlap)))continue;const d=o.prog-c.prog;
@@ -746,7 +753,7 @@ function botControl(R,c,dt){
   /* v52: el agarre de la comprobación se calcula con el agua que hay en la curva que viene, no solo donde está el coche:
      llegando de una recta seca a una curva mojada frenaban tarde y se iban largos todos, uno detrás de otro */
   if(SIMB&&tr.kR&&!underSC){const w0=c.wet||0;let wA=w0;if(R.water&&WETLOOK>0){for(let k=4;k<64;k+=6){const j=(c.idx+k)%N,wj=R.water[j]*(R.dry?1-0.85*R.dry[j]:1);if(wj>wA)wA=wj;}const g0=tyreGrip(c);c.wet=w0+(wA-w0)*WETLOOK;if(tyreGrip(c)>g0)c.wet=w0;}
-    const wq=wv>0.02||c.wet*1.6>0.02,gl=gripLat(c,Math.max(150,Math.abs(vf)),R)*(wq?BOTLIVEW:BOTLIVE),dec=BOTDEC*G*2.7*0.85*(wq?Math.min(1,Math.pow(tyreGrip(c)*trackGrip(R,c)/0.95,1.5)):1);c.wet=w0;let vb=1e9;for(let k=2;k<64;k+=3){const kk=tr.kR[(c.idx+k)%N];if(kk<2e-5)continue;const vc=Math.sqrt(gl/kk);vb=Math.min(vb,Math.sqrt(vc*vc+2*dec*k*tr.sp));}target=Math.min(target,vb*c.skill*c.pace);}
+    const wq=wv>0.02||c.wet*1.6>0.02,gl=gripLat(c,Math.max(150,Math.abs(vf)),R)*(wq?BOTLIVEW:BOTLIVE),dec=(fightB?FIGHTDEC*1.3:BOTDEC)*G*2.7*0.85*(wq?Math.min(1,Math.pow(tyreGrip(c)*trackGrip(R,c)/0.95,1.5)):1);c.wet=w0;let vb=1e9;for(let k=2;k<64;k+=3){const kk=tr.kR[(c.idx+k)%N];if(kk<2e-5)continue;const vc=Math.sqrt(gl/kk);vb=Math.min(vb,Math.sqrt(vc*vc+2*dec*k*tr.sp));}target=Math.min(target,vb*c.skill*c.pace);}
   if(SIMB){const kk=Math.max(Math.abs(tr.k[(c.idx+4)%N]),Math.abs(tr.k[(c.idx+10)%N]));target*=Math.sqrt(Math.max(0.55,1-kk*Math.abs(c.offset)*1.2));}
   if(underSC){ // en fila detrás del coche de seguridad / del de delante, sin adelantar
     let ahead=null,da=1e9;for(const o of R.cars){if(o===c||o.pit||o.dnf||o.finished||(rc&&o===rc))continue;if((o.off||Math.abs(o.lat)>W+KERB+6||o.recover>0)&&Math.hypot(o.vx,o.vy)<90)continue;const d=o.prog-c.prog;if(d>0&&d<da){da=d;ahead=o;}}
@@ -1130,6 +1137,7 @@ function collidePair(R,a,b){
   /* v62: golpes con más inercia: el giro que transmite el golpe ya no se recorta tanto (antes un toque a <30 km/h casi no giraba
      y el máximo era 0,6 rad/s), y hay rozamiento en el contacto (ruedas que se tocan se enganchan y el coche tocado gira) */
   const yk=clamp((-vn-HITYK0)/90,0.3,1),ym=HITYM0+3.2*clamp((-vn-40)/170,0,1);
+  if(-vn>25){a.hitT=b.hitT=R.t;} /* v77: último contacto (melés con SC/amarilla) */
   a.vx-=n[0]*j*ia;a.vy-=n[1]*j*ia;a.av=clamp(a.av-ran*j*ia/IE*yk,-ym,ym);
   b.vx+=n[0]*j*ib;b.vy+=n[1]*j*ib;b.av=clamp(b.av+rbn*j*ib/IE*yk,-ym,ym);
   if(HITMU>0){const tx=-n[1],ty=n[0],vt=(vbx-vax)*tx+(vby-vay)*ty,rat=rax*ty-ray*tx,rbt=rbx*ty-rby*tx;
@@ -1709,7 +1717,10 @@ function stepRace(R,dt){
         if(offNow&&ahead&&Y.prev[o.id]===false)Y.regain[o.id]=R.t+90;
         else if(inY&&ahead&&Y.prev[o.id]===false&&!(Y.owe&&Y.owe.id===o.id)&&!(R.t<(Y.cool&&Y.cool[o.id]||0)))Y.regain[o.id]=R.t+60; /* v64: te ha pasado él con amarilla/SC */
         if(Y.prev[o.id]===true&&!ahead&&Y.regain[o.id]&&R.t<Y.regain[o.id]){delete Y.regain[o.id];Y.prev[o.id]=ahead;continue;}
-        const oSlow=o.off||o.recover>0||o.engineDead||o.ooc>R.t||(!scOn&&Math.hypot(o.vx,o.vy)<0.6*Math.max(80,pv));
+        const oSlow=o.off||o.recover>0||o.engineDead||o.ooc>R.t||(!scOn&&Math.hypot(o.vx,o.vy)<0.6*Math.max(80,pv))
+          /* v77: melé: si tú o él os habéis tocado hace poco, o hay un accidente justo ahí, o va dañado/mucho más lento (también con SC), no es un adelantamiento sancionable */
+          ||R.t-(o.hitT||-99)<5||R.t-(p.hitT||-99)<5||o.wheelOff!=null||o.punct||o.issue||o.engineDead||(o.dRear||0)>0.5||o.rwOff||(o.dWing||0)>0.5||(o.dSusp||0)>0.5||(scOn&&Math.hypot(o.vx,o.vy)<0.7*Math.max(60,pv))
+          ||cars.some(x=>x.dnf&&R.t-(x.hitT||-99)<20&&Math.abs(((x.idx-p.idx+N+N/2)%N)-N/2)<25);
         if(Math.abs(o.prog-p.prog)<2)continue; // rueda con rueda: aún no hay adelantamiento
         if(Y.prev[o.id]===true&&!ahead&&inY&&!oSlow&&!Y.owe&&!(R.t<(Y.cool&&Y.cool[o.id]||0))&&Math.abs(p.prog-o.prog)<60){Y.owe={id:o.id,t:R.t,who:o.name,sc:scOn};o.reclaim={id:p.id,until:R.t+12};if(R.fx)R.events.push({type:'y_warn',car:p,who:o.name,sc:scOn});}
         Y.prev[o.id]=ahead;}
@@ -1727,6 +1738,9 @@ function stepRace(R,dt){
     if(a.finished&&b.finished)return R.timed&&(a.finLap||0)!==(b.finLap||0)?(b.finLap||0)-(a.finLap||0):a.finishTime-b.finishTime;
     if(a.finished)return -1;if(b.finished)return 1;return b.prog-a.prog;
   });
+  /* v77: posición de cada coche al acabar cada vuelta (gráfico de posiciones de los resultados); posLap[0] = parrilla */
+  if(R.mode==='race'&&R.phase==='race'){if(!R.posRec){R.posRec=true;R.standings.forEach((c,i)=>{c.posLap=[i+1];});}
+    R.standings.forEach((c,i)=>{const L=c.posLap;if(!L||c.dnf)return;const done=c.finished?(c.finLap||c.lap)-1:c.lap-1;while(L.length-1<done&&L.length-1<R.laps)L.push(i+1);});}
 }
 
 // Simulaciones rápidas sin gráficos: vuelta de clasificación de un bot y estimación de consumo/desgaste.
